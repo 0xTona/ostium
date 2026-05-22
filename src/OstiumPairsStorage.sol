@@ -26,8 +26,7 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
     mapping(uint8 groupIndex => Group) public groups;
     mapping(uint8 feeIndex => Fee) public fees;
     mapping(uint8 groupIndex => uint256[2]) public groupsCollaterals; // (long, short)
-    mapping(bytes32 fromPair => mapping(bytes32 toPair => bool))
-        public isPairListed;
+    mapping(bytes32 fromPair => mapping(bytes32 toPair => bool)) public isPairListed;
     mapping(uint16 pairIndex => bool) public isPairIndexListed;
 
     constructor() {
@@ -41,12 +40,13 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         registry = _registry;
     }
 
-    function initializeV2(
-        uint16[] calldata indices,
-        uint32[] calldata overnightMaxLeverages
-    ) external reinitializer(2) {
-        if (indices.length != overnightMaxLeverages.length)
+    function initializeV2(uint16[] calldata indices, uint32[] calldata overnightMaxLeverages)
+        external
+        reinitializer(2)
+    {
+        if (indices.length != overnightMaxLeverages.length) {
             revert WrongParams();
+        }
 
         for (uint16 i; i < indices.length; i++) {
             _setPairOvernightMaxLeverage(indices[i], overnightMaxLeverages[i]);
@@ -80,8 +80,9 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
     }
 
     function _groupListed(uint8 _groupIndex) internal view {
-        if (groups[_groupIndex].minLeverage == 0)
+        if (groups[_groupIndex].minLeverage == 0) {
             revert GroupNotListed(_groupIndex);
+        }
     }
 
     modifier feeListed(uint8 _feeIndex) {
@@ -122,18 +123,12 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         //  Why not `_pair.maxLeverage != 0 ? min(_pair.maxLeverage, groups[_pair.groupIndex].maxLeverage) : groups[_pair.groupIndex].maxLeverage`
 
         if (
-            _pair.overnightMaxLeverage >
-            (
-                _pair.maxLeverage != 0
-                    ? _pair.maxLeverage
-                    : groups[_pair.groupIndex].maxLeverage
-            ) ||
-            (_pair.overnightMaxLeverage != 0 &&
-                _pair.overnightMaxLeverage <
-                groups[_pair.groupIndex].minLeverage) ||
-            _pair.maxLeverage > MAX_LEVERAGE ||
-            (_pair.maxLeverage != 0 &&
-                _pair.maxLeverage < groups[_pair.groupIndex].minLeverage)
+            _pair.overnightMaxLeverage
+                    > (_pair.maxLeverage != 0 ? _pair.maxLeverage : groups[_pair.groupIndex].maxLeverage)
+                || (_pair.overnightMaxLeverage != 0
+                    && _pair.overnightMaxLeverage < groups[_pair.groupIndex].minLeverage)
+                || _pair.maxLeverage > MAX_LEVERAGE
+                || (_pair.maxLeverage != 0 && _pair.maxLeverage < groups[_pair.groupIndex].minLeverage)
         ) {
             revert WrongParams();
         }
@@ -146,9 +141,8 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
 
     function _groupOk(Group calldata _group) internal pure {
         if (
-            _group.minLeverage < MIN_LEVERAGE ||
-            _group.maxLeverage > MAX_LEVERAGE ||
-            _group.minLeverage >= _group.maxLeverage
+            _group.minLeverage < MIN_LEVERAGE || _group.maxLeverage > MAX_LEVERAGE
+                || _group.minLeverage >= _group.maxLeverage
         ) revert WrongParams();
     }
 
@@ -158,19 +152,12 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
     }
 
     function _feeOk(Fee calldata _fee) internal pure {
-        if (
-            _fee.minLevPos == 0 ||
-            _fee.liqFeeP > 100 ||
-            _fee.oracleFee == 0 ||
-            _fee.oracleFee > MAX_ORACLE_FEE
-        ) {
+        if (_fee.minLevPos == 0 || _fee.liqFeeP > 100 || _fee.oracleFee == 0 || _fee.oracleFee > MAX_ORACLE_FEE) {
             revert WrongParams();
         }
     }
 
-    function addPair(
-        Pair calldata _pair
-    )
+    function addPair(Pair calldata _pair)
         public
         onlyGov
         groupListed(_pair.groupIndex)
@@ -212,10 +199,7 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         }
     }
 
-    function updatePair(
-        uint16 _pairIndex,
-        Pair calldata _pair
-    )
+    function updatePair(uint16 _pairIndex, Pair calldata _pair)
         external
         onlyGov
         feeListed(_pair.feeIndex)
@@ -239,13 +223,8 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         emit PairUpdated(_pairIndex);
     }
 
-    function removePair(
-        uint16 _pairIndex
-    ) external onlyGov pairListed(_pairIndex) {
-        if (
-            IOstiumTradingStorage(registry.getContractAddress("tradingStorage"))
-                .pairTradersCount(_pairIndex) > 0
-        ) {
+    function removePair(uint16 _pairIndex) external onlyGov pairListed(_pairIndex) {
+        if (IOstiumTradingStorage(registry.getContractAddress("tradingStorage")).pairTradersCount(_pairIndex) > 0) {
             revert PairNotEmpty();
         }
 
@@ -263,10 +242,7 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         emit GroupAdded(groupsCount++, _group.name);
     }
 
-    function updateGroup(
-        uint8 _id,
-        Group calldata _group
-    ) external onlyGov groupListed(_id) groupOk(_group) {
+    function updateGroup(uint8 _id, Group calldata _group) external onlyGov groupListed(_id) groupOk(_group) {
         groups[_id] = _group;
         emit GroupUpdated(_id);
     }
@@ -277,20 +253,15 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         emit FeeAdded(feesCount++, _fee.name);
     }
 
-    function updateFee(
-        uint8 _id,
-        Fee calldata _fee
-    ) external onlyGov feeListed(_id) feeOk(_fee) {
+    function updateFee(uint8 _id, Fee calldata _fee) external onlyGov feeListed(_id) feeOk(_fee) {
         fees[_id] = _fee;
         emit FeeUpdated(_id);
     }
 
-    function updateGroupCollateral(
-        uint16 _pairIndex,
-        uint256 _amount,
-        bool _long,
-        bool _increase
-    ) external pairListed(_pairIndex) {
+    function updateGroupCollateral(uint16 _pairIndex, uint256 _amount, bool _long, bool _increase)
+        external
+        pairListed(_pairIndex)
+    {
         //@note
         //Intention
         //  1) Guard:
@@ -302,21 +273,17 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         //  2) Don't revert if decrease amount > collateralOpen[index]
 
         if (
-            msg.sender != registry.getContractAddress("callbacks") &&
-            msg.sender != registry.getContractAddress("trading")
+            msg.sender != registry.getContractAddress("callbacks")
+                && msg.sender != registry.getContractAddress("trading")
         ) revert NotAuthorized(msg.sender);
 
-        uint256[2] storage collateralOpen = groupsCollaterals[
-            pairs[_pairIndex].groupIndex
-        ];
+        uint256[2] storage collateralOpen = groupsCollaterals[pairs[_pairIndex].groupIndex];
         uint256 index = _long ? 0 : 1;
 
         if (_increase) {
             collateralOpen[index] += _amount;
         } else {
-            collateralOpen[index] = collateralOpen[index] > _amount
-                ? collateralOpen[index] - _amount
-                : 0;
+            collateralOpen[index] = collateralOpen[index] > _amount ? collateralOpen[index] - _amount : 0;
         }
     }
 
@@ -324,9 +291,7 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         return pairs[_pairIndex].feed;
     }
 
-    function getFeedInfo(
-        uint16 pairIndex
-    ) external view returns (bytes32, uint32) {
+    function getFeedInfo(uint16 pairIndex) external view returns (bytes32, uint32) {
         return (pairs[pairIndex].feed, pairs[pairIndex].overnightMaxLeverage);
     }
 
@@ -334,9 +299,7 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         return pairs[pairIndex].oracle;
     }
 
-    function pairOvernightMaxLeverage(
-        uint16 _pairIndex
-    ) external view returns (uint32) {
+    function pairOvernightMaxLeverage(uint16 _pairIndex) external view returns (uint32) {
         return pairs[_pairIndex].overnightMaxLeverage;
     }
 
@@ -345,25 +308,17 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
     }
 
     function pairMaxLeverage(uint16 _pairIndex) public view returns (uint32) {
-        return
-            pairs[_pairIndex].maxLeverage == 0
-                ? groups[pairs[_pairIndex].groupIndex].maxLeverage
-                : pairs[_pairIndex].maxLeverage;
+        return pairs[_pairIndex].maxLeverage == 0
+            ? groups[pairs[_pairIndex].groupIndex].maxLeverage
+            : pairs[_pairIndex].maxLeverage;
     }
 
-    function groupMaxCollateral(
-        uint16 _pairIndex
-    ) external view returns (uint256) {
-        return
-            (groups[pairs[_pairIndex].groupIndex].maxCollateralP *
-                IOstiumVault(registry.getContractAddress("vault"))
-                    .currentBalance()) / 100_00;
+    function groupMaxCollateral(uint16 _pairIndex) external view returns (uint256) {
+        return (groups[pairs[_pairIndex].groupIndex].maxCollateralP
+                * IOstiumVault(registry.getContractAddress("vault")).currentBalance()) / 100_00;
     }
 
-    function groupCollateral(
-        uint16 _pairIndex,
-        bool _long
-    ) external view returns (uint256) {
+    function groupCollateral(uint16 _pairIndex, bool _long) external view returns (uint256) {
         return groupsCollaterals[pairs[_pairIndex].groupIndex][_long ? 0 : 1];
     }
 
@@ -371,17 +326,11 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         return fees[pairs[_pairIndex].feeIndex].oracleFee;
     }
 
-    function setPairMaxLeverage(
-        uint16 pairIndex,
-        uint32 maxLeverage
-    ) external onlyManager {
+    function setPairMaxLeverage(uint16 pairIndex, uint32 maxLeverage) external onlyManager {
         _setPairMaxLeverage(pairIndex, maxLeverage);
     }
 
-    function setPairMaxLeverageArray(
-        uint16[] calldata indices,
-        uint32[] calldata values
-    ) external onlyManager {
+    function setPairMaxLeverageArray(uint16[] calldata indices, uint32[] calldata values) external onlyManager {
         uint256 len = indices.length;
         if (len != values.length) revert WrongParams();
 
@@ -390,16 +339,11 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         }
     }
 
-    function _setPairMaxLeverage(
-        uint16 pairIndex,
-        uint32 maxLeverage
-    ) private pairListed(pairIndex) {
+    function _setPairMaxLeverage(uint16 pairIndex, uint32 maxLeverage) private pairListed(pairIndex) {
         Pair storage p = pairs[pairIndex];
         if (
-            maxLeverage > MAX_LEVERAGE ||
-            (maxLeverage != 0 &&
-                maxLeverage < groups[p.groupIndex].minLeverage) ||
-            (maxLeverage != 0 && maxLeverage < p.overnightMaxLeverage)
+            maxLeverage > MAX_LEVERAGE || (maxLeverage != 0 && maxLeverage < groups[p.groupIndex].minLeverage)
+                || (maxLeverage != 0 && maxLeverage < p.overnightMaxLeverage)
         ) {
             revert WrongParams();
         }
@@ -407,17 +351,14 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         emit PairMaxLeverageUpdated(pairIndex, maxLeverage);
     }
 
-    function setPairOvernightMaxLeverage(
-        uint16 pairIndex,
-        uint32 overnightMaxLeverage
-    ) external onlyManager {
+    function setPairOvernightMaxLeverage(uint16 pairIndex, uint32 overnightMaxLeverage) external onlyManager {
         _setPairOvernightMaxLeverage(pairIndex, overnightMaxLeverage);
     }
 
-    function setPairOvernightMaxLeverageArray(
-        uint16[] calldata indices,
-        uint32[] calldata values
-    ) external onlyManager {
+    function setPairOvernightMaxLeverageArray(uint16[] calldata indices, uint32[] calldata values)
+        external
+        onlyManager
+    {
         uint256 len = indices.length;
         if (len != values.length) revert WrongParams();
 
@@ -426,20 +367,13 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         }
     }
 
-    function _setPairOvernightMaxLeverage(
-        uint16 pairIndex,
-        uint32 overnightMaxLeverage
-    ) private pairListed(pairIndex) {
+    function _setPairOvernightMaxLeverage(uint16 pairIndex, uint32 overnightMaxLeverage) private pairListed(pairIndex) {
         if (
-            overnightMaxLeverage >
-            (
-                pairs[pairIndex].maxLeverage != 0
-                    ? pairs[pairIndex].maxLeverage
-                    : groups[pairs[pairIndex].groupIndex].maxLeverage
-            ) ||
-            (overnightMaxLeverage != 0 &&
-                overnightMaxLeverage <
-                groups[pairs[pairIndex].groupIndex].minLeverage)
+            overnightMaxLeverage
+                    > (pairs[pairIndex].maxLeverage != 0
+                            ? pairs[pairIndex].maxLeverage
+                            : groups[pairs[pairIndex].groupIndex].maxLeverage)
+                || (overnightMaxLeverage != 0 && overnightMaxLeverage < groups[pairs[pairIndex].groupIndex].minLeverage)
         ) {
             revert WrongParams();
         }
@@ -449,9 +383,7 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         emit PairOvernightMaxLeverageUpdated(pairIndex, overnightMaxLeverage);
     }
 
-    function pairLiquidationFeeP(
-        uint16 _pairIndex
-    ) external view returns (uint16) {
+    function pairLiquidationFeeP(uint16 _pairIndex) external view returns (uint16) {
         return fees[pairs[_pairIndex].feeIndex].liqFeeP;
     }
 
@@ -459,9 +391,7 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         return fees[pairs[_pairIndex].feeIndex].minLevPos;
     }
 
-    function pairsBackend(
-        uint16 _index
-    ) external view returns (Pair memory, Group memory, Fee memory) {
+    function pairsBackend(uint16 _index) external view returns (Pair memory, Group memory, Fee memory) {
         Pair memory p = pairs[_index];
         return (p, groups[p.groupIndex], fees[p.feeIndex]);
     }
@@ -476,13 +406,8 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         return lev;
     }
 
-    function getPairsMaxLeverage(
-        uint256 startId,
-        uint256 finalId
-    ) external view returns (uint32[] memory) {
-        if (
-            startId >= pairsCount || finalId >= pairsCount || startId > finalId
-        ) {
+    function getPairsMaxLeverage(uint256 startId, uint256 finalId) external view returns (uint32[] memory) {
+        if (startId >= pairsCount || finalId >= pairsCount || startId > finalId) {
             revert WrongParams();
         }
 

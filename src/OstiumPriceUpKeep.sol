@@ -5,8 +5,8 @@ import "./interfaces/IOstiumTradingCallbacks.sol";
 import "./interfaces/IOstiumForwarded.sol";
 import "./interfaces/IOstiumPriceUpKeep.sol";
 
-import "src/interfaces/external/IChainlinkFeeManager.sol";
-import "src/interfaces/external/IChainlinkVerifierProxy.sol";
+import "./interfaces/external/IChainlinkFeeManager.sol";
+import "./interfaces/external/IChainlinkVerifierProxy.sol";
 
 import "@openzeppelin/contracts/utils/Address.sol";
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";

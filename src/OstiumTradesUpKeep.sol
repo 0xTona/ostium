@@ -1,16 +1,16 @@
 // SPDX-License-Identifier: MIT
-import '@openzeppelin/contracts/utils/math/SafeCast.sol';
-import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-import 'src/interfaces/IOstiumTrading.sol';
-import 'src/interfaces/IOstiumRegistry.sol';
-import 'src/interfaces/IOstiumPairInfos.sol';
-import 'src/interfaces/IOstiumForwarded.sol';
-import 'src/interfaces/IOstiumTradingCallbacks.sol';
-import 'src/interfaces/IOstiumPairsStorage.sol';
-import 'src/interfaces/IOstiumTradesUpKeep.sol';
-import 'src/interfaces/IOstiumTradingStorage.sol';
-import 'src/interfaces/IOstiumAutomationCompatible.sol';
+import "src/interfaces/IOstiumTrading.sol";
+import "src/interfaces/IOstiumRegistry.sol";
+import "src/interfaces/IOstiumPairInfos.sol";
+import "src/interfaces/IOstiumForwarded.sol";
+import "src/interfaces/IOstiumTradingCallbacks.sol";
+import "src/interfaces/IOstiumPairsStorage.sol";
+import "src/interfaces/IOstiumTradesUpKeep.sol";
+import "src/interfaces/IOstiumTradingStorage.sol";
+import "src/interfaces/IOstiumAutomationCompatible.sol";
 
 pragma solidity ^0.8.24;
 
@@ -44,7 +44,7 @@ contract OstiumTradesUpKeep is IOstiumTradesUpKeep, IOstiumAutomationCompatible,
             revert NotForwarder(msg.sender);
         }
         (SimplifiedTradeId[] memory trades, uint256 timestamp) = abi.decode(performData, (SimplifiedTradeId[], uint256));
-        IOstiumTrading trading = IOstiumTrading(registry.getContractAddress('trading'));
+        IOstiumTrading trading = IOstiumTrading(registry.getContractAddress("trading"));
         for (uint256 i = 0; i < trades.length; i++) {
             if (trades[i].trader != address(0)) {
                 IOstiumTrading.AutomationOrderStatus status = trading.executeAutomationOrder(

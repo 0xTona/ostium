@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-import './interfaces/IOwnable.sol';
-import './interfaces/IOstiumVault.sol';
-import './interfaces/IOstiumOpenPnl.sol';
-import './interfaces/IOstiumRegistry.sol';
+import "./interfaces/IOwnable.sol";
+import "./interfaces/IOstiumVault.sol";
+import "./interfaces/IOstiumOpenPnl.sol";
+import "./interfaces/IOstiumRegistry.sol";
 
-import '@openzeppelin/contracts/utils/math/SafeCast.sol';
-import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 pragma solidity ^0.8.24;
 
@@ -107,7 +107,7 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
 
     function forceNewEpoch() external {
         if (
-            block.timestamp - IOstiumVault(registry.getContractAddress('vault')).currentEpochStart()
+            block.timestamp - IOstiumVault(registry.getContractAddress("vault")).currentEpochStart()
                 < requestsStart + requestsEvery * requestsCount
         ) revert TooEarly();
 
@@ -120,7 +120,8 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
 
         if (
             firstRequest
-                && block.timestamp - IOstiumVault(registry.getContractAddress('vault')).currentEpochStart() >= requestsStart
+                && block.timestamp - IOstiumVault(registry.getContractAddress("vault")).currentEpochStart()
+                    >= requestsStart
         ) {
             makeOpenPnlRequest();
         } else if (!firstRequest && block.timestamp - nextEpochValuesLastRequestTs >= requestsEvery) {
@@ -145,12 +146,12 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
         nextEpochValues.push(openPnlValue);
 
         emit NextEpochValueRequested(
-            IOstiumVault(registry.getContractAddress('vault')).currentEpoch(), lastRequestId, openPnlValue
+            IOstiumVault(registry.getContractAddress("vault")).currentEpoch(), lastRequestId, openPnlValue
         );
     }
 
     function startNewEpoch() private returns (uint256 newEpoch) {
-        IOstiumVault vault = IOstiumVault(registry.getContractAddress('vault'));
+        IOstiumVault vault = IOstiumVault(registry.getContractAddress("vault"));
         nextEpochValuesRequestCount = 0;
         nextEpochValuesLastRequestTs = 0;
 
@@ -181,7 +182,7 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
         bool buy,
         bool open
     ) external {
-        if (msg.sender != registry.getContractAddress('callbacks')) {
+        if (msg.sender != registry.getContractAddress("callbacks")) {
             revert NotCallbacks(msg.sender);
         }
         int256 oiNotionalSigned = buy ? oiNotional.toInt256() : -oiNotional.toInt256();

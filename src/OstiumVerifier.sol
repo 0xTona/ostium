@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import "src/interfaces/IOstiumVerifier.sol";
-import "src/interfaces/IOstiumRegistry.sol";
+import "./interfaces/IOstiumVerifier.sol";
+import "./interfaces/IOstiumRegistry.sol";
 import "@openzeppelin/contracts/utils/Strings.sol";
 
 contract OstiumVerifier is IOstiumVerifier {
