@@ -51,23 +51,17 @@ library TradingLib {
 
         //1 {
         if (
-            storageT.openTradesCount(sender, t.pairIndex) +
-                storageT.pendingMarketOpenCount(sender, t.pairIndex) +
-                storageT.openLimitOrdersCount(sender, t.pairIndex) >=
-            storageT.maxTradesPerPair()
+            storageT.openTradesCount(sender, t.pairIndex) + storageT.pendingMarketOpenCount(sender, t.pairIndex)
+                    + storageT.openLimitOrdersCount(sender, t.pairIndex) >= storageT.maxTradesPerPair()
         ) revert IOstiumTrading.MaxTradesPerPairReached(sender, t.pairIndex);
 
-        if (
-            storageT.pendingOrderIdsCount(sender) >=
-            storageT.maxPendingMarketOrders()
-        ) {
+        if (storageT.pendingOrderIdsCount(sender) >= storageT.maxPendingMarketOrders()) {
             revert IOstiumTrading.MaxPendingMarketOrdersReached(sender);
         }
 
         if (
-            t.leverage == 0 ||
-            t.leverage < pairsStored.pairMinLeverage(t.pairIndex) ||
-            t.leverage > pairsStored.pairMaxLeverage(t.pairIndex)
+            t.leverage == 0 || t.leverage < pairsStored.pairMinLeverage(t.pairIndex)
+                || t.leverage > pairsStored.pairMaxLeverage(t.pairIndex)
         ) revert IOstiumTrading.WrongLeverage(t.leverage);
 
         if (t.collateral > maxAllowedCollateral) {
@@ -85,9 +79,7 @@ library TradingLib {
             builderFee = (bf.builderFee * preFeeNotional) / PRECISION_6 / 100;
         }
 
-        uint256 maxOpeningFee = (preFeeNotional * takerFeeP) /
-            PRECISION_6 /
-            100;
+        uint256 maxOpeningFee = (preFeeNotional * takerFeeP) / PRECISION_6 / 100;
 
         uint256 totalMaxFees = maxOpeningFee + oracleFee + builderFee;
 
@@ -97,10 +89,7 @@ library TradingLib {
         //} 2
 
         //3 {
-        if (
-            ((t.collateral - totalMaxFees) * t.leverage) / 100 <
-            pairsStored.pairMinLevPos(t.pairIndex)
-        ) {
+        if (((t.collateral - totalMaxFees) * t.leverage) / 100 < pairsStored.pairMinLevPos(t.pairIndex)) {
             revert IOstiumTrading.BelowMinLevPos();
         }
         //} 3
@@ -129,40 +118,23 @@ library TradingLib {
             revert IOstiumTrading.NoTradeFound(sender, t.pairIndex, t.index);
         }
 
-        if (
-            storageT.pendingOrderIdsCount(sender) >=
-            storageT.maxPendingMarketOrders()
-        ) {
+        if (storageT.pendingOrderIdsCount(sender) >= storageT.maxPendingMarketOrders()) {
             revert IOstiumTrading.MaxPendingMarketOrdersReached(sender);
         }
 
-        if (
-            !checkNoPendingTriggers(
-                storageT,
-                sender,
-                t.pairIndex,
-                t.index,
-                triggerTimeout
-            )
-        ) {
+        if (!checkNoPendingTriggers(storageT, sender, t.pairIndex, t.index, triggerTimeout)) {
             revert IOstiumTrading.TriggerPending(sender, t.pairIndex, t.index);
         }
 
         if (i.beingMarketClosed) {
-            revert IOstiumTrading.AlreadyMarketClosed(
-                sender,
-                t.pairIndex,
-                t.index
-            );
+            revert IOstiumTrading.AlreadyMarketClosed(sender, t.pairIndex, t.index);
         }
 
-        uint256 remainingCollateral = (t.collateral *
-            (PERCENT_BASE - closePercentage)) / 100e2;
+        uint256 remainingCollateral = (t.collateral * (PERCENT_BASE - closePercentage)) / 100e2;
 
         if (
-            closePercentage != PERCENT_BASE &&
-            (remainingCollateral * t.leverage) / 100 <
-            pairsStorage.pairMinLevPos(t.pairIndex)
+            closePercentage != PERCENT_BASE
+                && (remainingCollateral * t.leverage) / 100 < pairsStorage.pairMinLevPos(t.pairIndex)
         ) {
             revert IOstiumTrading.BelowMinLevPos();
         }
@@ -176,28 +148,17 @@ library TradingLib {
         uint8 index,
         uint256 triggerTimeout
     ) external view {
-        if (
-            o.tp != 0 && (o.buy ? o.tp <= o.targetPrice : o.tp >= o.targetPrice)
-        ) {
+        if (o.tp != 0 && (o.buy ? o.tp <= o.targetPrice : o.tp >= o.targetPrice)) {
             revert IOstiumTrading.WrongTP();
         }
 
-        if (
-            o.sl != 0 && (o.buy ? o.sl >= o.targetPrice : o.sl <= o.targetPrice)
-        ) {
+        if (o.sl != 0 && (o.buy ? o.sl >= o.targetPrice : o.sl <= o.targetPrice)) {
             revert IOstiumTrading.WrongSL();
         }
 
-        if (
-            !checkNoPendingTrigger(
-                storageT,
-                sender,
-                pairIndex,
-                index,
-                IOstiumTradingStorage.LimitOrder.OPEN,
-                triggerTimeout
-            )
-        ) {
+        if (!checkNoPendingTrigger(
+                storageT, sender, pairIndex, index, IOstiumTradingStorage.LimitOrder.OPEN, triggerTimeout
+            )) {
             revert IOstiumTrading.TriggerPending(sender, pairIndex, index);
         }
     }
@@ -213,16 +174,9 @@ library TradingLib {
             revert IOstiumTrading.NoLimitFound(sender, pairIndex, index);
         }
 
-        if (
-            !checkNoPendingTrigger(
-                storageT,
-                sender,
-                pairIndex,
-                index,
-                IOstiumTradingStorage.LimitOrder.OPEN,
-                triggerTimeout
-            )
-        ) {
+        if (!checkNoPendingTrigger(
+                storageT, sender, pairIndex, index, IOstiumTradingStorage.LimitOrder.OPEN, triggerTimeout
+            )) {
             revert IOstiumTrading.TriggerPending(sender, pairIndex, index);
         }
     }
@@ -235,18 +189,9 @@ library TradingLib {
         IOstiumTradingStorage.LimitOrder orderType,
         uint256 triggerTimeout
     ) public view returns (bool) {
-        uint256 triggerBlock = storageT.orderTriggerBlock(
-            trader,
-            pairIndex,
-            index,
-            orderType
-        );
+        uint256 triggerBlock = storageT.orderTriggerBlock(trader, pairIndex, index, orderType);
 
-        if (
-            triggerBlock == 0 ||
-            (triggerBlock > 0 &&
-                ChainUtils.getBlockNumber() - triggerBlock >= triggerTimeout)
-        ) {
+        if (triggerBlock == 0 || (triggerBlock > 0 && ChainUtils.getBlockNumber() - triggerBlock >= triggerTimeout)) {
             return true;
         }
         return false;
@@ -259,46 +204,20 @@ library TradingLib {
         uint8 index,
         uint256 triggerTimeout
     ) public view returns (bool) {
-        return
-            checkNoPendingTrigger(
-                storageT,
-                trader,
-                pairIndex,
-                index,
-                IOstiumTradingStorage.LimitOrder.TP,
-                triggerTimeout
-            ) &&
-            checkNoPendingTrigger(
-                storageT,
-                trader,
-                pairIndex,
-                index,
-                IOstiumTradingStorage.LimitOrder.SL,
-                triggerTimeout
-            ) &&
-            checkNoPendingTrigger(
-                storageT,
-                trader,
-                pairIndex,
-                index,
-                IOstiumTradingStorage.LimitOrder.LIQ,
-                triggerTimeout
-            ) &&
-            checkNoPendingTrigger(
-                storageT,
-                trader,
-                pairIndex,
-                index,
-                IOstiumTradingStorage.LimitOrder.CLOSE_DAY_TRADE,
-                triggerTimeout
-            ) &&
-            checkNoPendingTrigger(
-                storageT,
-                trader,
-                pairIndex,
-                index,
-                IOstiumTradingStorage.LimitOrder.REMOVE_COLLATERAL,
-                triggerTimeout
-            );
+        return checkNoPendingTrigger(
+            storageT, trader, pairIndex, index, IOstiumTradingStorage.LimitOrder.TP, triggerTimeout
+        )
+            && checkNoPendingTrigger(
+            storageT, trader, pairIndex, index, IOstiumTradingStorage.LimitOrder.SL, triggerTimeout
+        )
+            && checkNoPendingTrigger(
+            storageT, trader, pairIndex, index, IOstiumTradingStorage.LimitOrder.LIQ, triggerTimeout
+        )
+            && checkNoPendingTrigger(
+            storageT, trader, pairIndex, index, IOstiumTradingStorage.LimitOrder.CLOSE_DAY_TRADE, triggerTimeout
+        )
+            && checkNoPendingTrigger(
+            storageT, trader, pairIndex, index, IOstiumTradingStorage.LimitOrder.REMOVE_COLLATERAL, triggerTimeout
+        );
     }
 }
