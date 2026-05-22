@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: MIT
-import 'src/interfaces/IOstiumTrading.sol';
+import "src/interfaces/IOstiumTrading.sol";
 
 pragma solidity ^0.8.24;
 
