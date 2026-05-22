@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
-import './interfaces/IOstiumRegistry.sol';
+import "./interfaces/IOstiumRegistry.sol";
 
-import '@openzeppelin/contracts/access/Ownable.sol';
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 pragma solidity ^0.8.24;
 
@@ -38,7 +38,12 @@ contract OstiumRegistry is IOstiumRegistry, Ownable {
         }
     }
 
-    constructor(address _gov, address _dev, address _manager, address owner) Ownable(msg.sender) {
+    constructor(
+        address _gov,
+        address _dev,
+        address _manager,
+        address owner
+    ) Ownable(msg.sender) {
         setGov(_gov);
         setDev(_dev);
         setManager(_manager);
@@ -72,7 +77,10 @@ contract OstiumRegistry is IOstiumRegistry, Ownable {
         emit ManagerUpdated(_manager);
     }
 
-    function registerContract(bytes32 name, address contractAddress) public onlyGov isContract(contractAddress) {
+    function registerContract(
+        bytes32 name,
+        address contractAddress
+    ) public onlyGov isContract(contractAddress) {
         if (contracts[name] != address(0)) revert AlreadyRegistered(name);
 
         contracts[name] = contractAddress;
@@ -80,7 +88,10 @@ contract OstiumRegistry is IOstiumRegistry, Ownable {
         emit ContractRegistered(name, contractAddress);
     }
 
-    function registerContracts(bytes32[] memory names, address[] memory contractAddresses) external onlyGov {
+    function registerContracts(
+        bytes32[] memory names,
+        address[] memory contractAddresses
+    ) external onlyGov {
         if (names.length != contractAddresses.length) revert WrongParams();
 
         for (uint256 i = 0; i < names.length; i++) {
@@ -88,7 +99,10 @@ contract OstiumRegistry is IOstiumRegistry, Ownable {
         }
     }
 
-    function updateContract(bytes32 name, address contractAddress) public onlyGov isContract(contractAddress) {
+    function updateContract(
+        bytes32 name,
+        address contractAddress
+    ) public onlyGov isContract(contractAddress) {
         if (contracts[name] == address(0)) revert NotFound(name);
 
         contracts[name] = contractAddress;
@@ -96,7 +110,10 @@ contract OstiumRegistry is IOstiumRegistry, Ownable {
         emit ContractUpdated(name, contractAddress);
     }
 
-    function updateContracts(bytes32[] memory names, address[] memory contractAddresses) external onlyGov {
+    function updateContracts(
+        bytes32[] memory names,
+        address[] memory contractAddresses
+    ) external onlyGov {
         if (names.length != contractAddresses.length) revert WrongParams();
         for (uint256 i = 0; i < names.length; i++) {
             updateContract(names[i], contractAddresses[i]);

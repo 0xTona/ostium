@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
-import '@openzeppelin/contracts/utils/math/SafeCast.sol';
-import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-import './lib/ChainUtils.sol';
-import './interfaces/IOstiumTradingStorage.sol';
-import './interfaces/IOstiumRegistry.sol';
-import './interfaces/IOstiumPairInfos.sol';
+import "./lib/ChainUtils.sol";
+import "./interfaces/IOstiumTradingStorage.sol";
+import "./interfaces/IOstiumRegistry.sol";
+import "./interfaces/IOstiumPairInfos.sol";
 
 pragma solidity ^0.8.24;
 
@@ -31,49 +31,56 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
     // Trades mappings
     mapping(address trader => mapping(uint16 pairIndex => mapping(uint8 tradeIndex => IOstiumTradingStorage.Trade)))
         public openTrades;
-    mapping(address trader => mapping(uint16 pairIndex => mapping(uint8 tradeIndex => TradeInfo))) public openTradesInfo;
-    mapping(address trader => mapping(uint16 pairIndex => uint32)) public openTradesCount;
+    mapping(address trader => mapping(uint16 pairIndex => mapping(uint8 tradeIndex => TradeInfo)))
+        public openTradesInfo;
+    mapping(address trader => mapping(uint16 pairIndex => uint32))
+        public openTradesCount;
 
     // Limit orders mappings
-    mapping(address trader => mapping(uint16 pairIndex => mapping(uint8 orderIndex => uint256))) public
-        openLimitOrderIds;
-    mapping(address trader => mapping(uint16 pairIndex => uint8)) public openLimitOrdersCount;
-    mapping(
-        address trader
-            => mapping(
-                uint16 pairIndex
-                    => mapping(uint8 index => mapping(IOstiumTradingStorage.LimitOrder orderType => uint256))
-            )
-    ) public orderTriggerBlock;
+    mapping(address trader => mapping(uint16 pairIndex => mapping(uint8 orderIndex => uint256)))
+        public openLimitOrderIds;
+    mapping(address trader => mapping(uint16 pairIndex => uint8))
+        public openLimitOrdersCount;
+    mapping(address trader => mapping(uint16 pairIndex => mapping(uint8 index => mapping(IOstiumTradingStorage.LimitOrder orderType => uint256))))
+        public orderTriggerBlock;
     mapping(uint16 pairIndex => OpenLimitOrder[]) public pairLimitOrders;
 
     // Pending orders mappings
-    mapping(uint256 orderId => PendingMarketOrderV2) public reqID_pendingMarketOrder;
-    mapping(uint256 orderId => PendingAutomationOrder) public reqID_pendingAutomationOrder;
+    mapping(uint256 orderId => PendingMarketOrderV2)
+        public reqID_pendingMarketOrder;
+    mapping(uint256 orderId => PendingAutomationOrder)
+        public reqID_pendingAutomationOrder;
 
     mapping(address trader => uint256[]) public pendingOrderIds;
-    mapping(address trader => mapping(uint16 pairIndex => uint8)) public pendingMarketOpenCount;
-    mapping(address trader => mapping(uint16 pairIndex => uint8)) public pendingMarketCloseCount;
+    mapping(address trader => mapping(uint16 pairIndex => uint8))
+        public pendingMarketOpenCount;
+    mapping(address trader => mapping(uint16 pairIndex => uint8))
+        public pendingMarketCloseCount;
 
     // List of open trades & limit orders
     mapping(uint16 pairIndex => address[]) public pairTraders;
-    mapping(address trader => mapping(uint16 pairIndex => uint256)) public pairTradersId;
+    mapping(address trader => mapping(uint16 pairIndex => uint256))
+        public pairTradersId;
 
     // Current and max open interests for each pair
     mapping(uint16 pairIndex => uint256[3]) public openInterest; // [ notional long (18 dec), notional short (18 dec), $ max (6 dec)]
 
-    mapping(uint256 => PendingRemoveCollateral) public reqID_pendingRemoveCollateral;
+    mapping(uint256 => PendingRemoveCollateral)
+        public reqID_pendingRemoveCollateral;
 
-    mapping(
-        address trader => mapping(uint16 pairIndex => mapping(uint256 tradeIndex => IOstiumTradingStorage.BuilderFee))
-    ) public builderData;
+    mapping(address trader => mapping(uint16 pairIndex => mapping(uint256 tradeIndex => IOstiumTradingStorage.BuilderFee)))
+        public builderData;
 
     constructor() {
         _disableInitializers();
     }
 
-    function initialize(IOstiumRegistry _registry, address _usdc) external initializer {
-        if (address(_registry) == address(0) || address(_usdc) == address(0)) revert NullAddr();
+    function initialize(
+        IOstiumRegistry _registry,
+        address _usdc
+    ) external initializer {
+        if (address(_registry) == address(0) || address(_usdc) == address(0))
+            revert NullAddr();
 
         usdc = _usdc;
         registry = _registry;
@@ -96,7 +103,8 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
     }
 
     function _onlyTrading() internal view {
-        if (msg.sender != registry.getContractAddress('trading')) revert NotTrading(msg.sender);
+        if (msg.sender != registry.getContractAddress("trading"))
+            revert NotTrading(msg.sender);
     }
 
     modifier onlyCallbacks() {
@@ -105,7 +113,8 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
     }
 
     function _onlyCallbacks() internal view {
-        if (msg.sender != registry.getContractAddress('callbacks')) revert NotCallbacks(msg.sender);
+        if (msg.sender != registry.getContractAddress("callbacks"))
+            revert NotCallbacks(msg.sender);
     }
 
     modifier onlyTradingOrCallbacks() {
@@ -124,8 +133,8 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
 
     function _onlyTradingOrCallbacks() internal view {
         if (
-            msg.sender != registry.getContractAddress('trading')
-                && msg.sender != registry.getContractAddress('callbacks')
+            msg.sender != registry.getContractAddress("trading") &&
+            msg.sender != registry.getContractAddress("callbacks")
         ) revert NotTradingOrCallbacks(msg.sender);
     }
 
@@ -134,30 +143,41 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
     }
 
     function _setMaxTradesPerPair(uint256 _maxTradesPerPair) private {
-        if (_maxTradesPerPair == 0 || _maxTradesPerPair > type(uint8).max) revert WrongParams();
+        if (_maxTradesPerPair == 0 || _maxTradesPerPair > type(uint8).max)
+            revert WrongParams();
         maxTradesPerPair = _maxTradesPerPair.toUint8();
         emit MaxTradesPerPairUpdated(_maxTradesPerPair);
     }
 
-    function setMaxPendingMarketOrders(uint256 _maxPendingMarketOrders) external onlyGov {
+    function setMaxPendingMarketOrders(
+        uint256 _maxPendingMarketOrders
+    ) external onlyGov {
         _setMaxPendingMarketOrders(_maxPendingMarketOrders);
     }
 
-    function _setMaxPendingMarketOrders(uint256 _maxPendingMarketOrders) private {
-        if (_maxPendingMarketOrders == 0 || _maxPendingMarketOrders > type(uint8).max) revert WrongParams();
+    function _setMaxPendingMarketOrders(
+        uint256 _maxPendingMarketOrders
+    ) private {
+        if (
+            _maxPendingMarketOrders == 0 ||
+            _maxPendingMarketOrders > type(uint8).max
+        ) revert WrongParams();
         maxPendingMarketOrders = _maxPendingMarketOrders.toUint8();
         emit MaxPendingMarketOrdersUpdated(_maxPendingMarketOrders);
     }
 
-    function setMaxOpenInterest(uint16 _pairIndex, uint256 _newMaxOpenInterest) public onlyManager {
+    function setMaxOpenInterest(
+        uint16 _pairIndex,
+        uint256 _newMaxOpenInterest
+    ) public onlyManager {
         openInterest[_pairIndex][2] = _newMaxOpenInterest;
         emit MaxOpenInterestUpdated(_pairIndex, _newMaxOpenInterest);
     }
 
-    function setMaxOpenInterestArray(uint16[] calldata _indices, uint256[] calldata _newMaxOpenInterests)
-        external
-        onlyManager
-    {
+    function setMaxOpenInterestArray(
+        uint16[] calldata _indices,
+        uint256[] calldata _newMaxOpenInterests
+    ) external onlyManager {
         if (_indices.length != _newMaxOpenInterests.length) {
             revert WrongParams();
         }
@@ -166,42 +186,102 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         }
     }
 
-    function storeTrade(Trade memory _trade, TradeInfo memory _tradeInfo) external onlyCallbacks {
+    function storeTrade(
+        Trade memory _trade,
+        TradeInfo memory _tradeInfo
+    ) external onlyCallbacks {
+        //@note
+        //Intention
+        //  0) onlyCallbacks
+        //  1) Find and set the next available trade index
+        //      reverts if maxTradesPerPair is reached
+        //  2) Store the main trade struct in storage
+        //  3) If new trader for the pair
+        //          3.1) add to pairTraders
+        //          3.2) Force beingMarketClosed = false and store tradeInfo
+        //          3.3) Increase openInterest
+        //Assumption
+        //  4) No matter `beingMarketClosed`'s value, it will be overwritten later
+        //Follow-up
+        //  4) beingMarketClosed = false
+        //      -> New trade can't be closed
+
+        //1-
         _trade.index = firstEmptyTradeIndex(_trade.trader, _trade.pairIndex);
+
+        //2
         openTrades[_trade.trader][_trade.pairIndex][_trade.index] = _trade;
 
+        //-1 {
         ++openTradesCount[_trade.trader][_trade.pairIndex];
         ++totalOpenTradesCount;
+        //} 1
 
+        //3 {
         if (openTradesCount[_trade.trader][_trade.pairIndex] == 1) {
-            pairTradersId[_trade.trader][_trade.pairIndex] = pairTraders[_trade.pairIndex].length;
+            //3.1 {
+            pairTradersId[_trade.trader][_trade.pairIndex] = pairTraders[
+                _trade.pairIndex
+            ].length;
             pairTraders[_trade.pairIndex].push(_trade.trader);
+            //} 3.1
+
+            //3.2 {
+            _tradeInfo.beingMarketClosed = false;
+            openTradesInfo[_trade.trader][_trade.pairIndex][
+                _trade.index
+            ] = _tradeInfo;
+            //} 3.2
+
+            //3.3
+            updateOpenInterest(
+                _trade.pairIndex,
+                _tradeInfo.oiNotional,
+                true,
+                _trade.buy
+            );
         }
-
-        _tradeInfo.beingMarketClosed = false;
-        openTradesInfo[_trade.trader][_trade.pairIndex][_trade.index] = _tradeInfo;
-
-        updateOpenInterest(_trade.pairIndex, _tradeInfo.oiNotional, true, _trade.buy);
+        //} 3
     }
 
-    function unregisterTrade(address _trader, uint16 _pairIndex, uint8 _index, uint256 _collateralToClose)
-        external
-        onlyCallbacks
-    {
+    function unregisterTrade(
+        address _trader,
+        uint16 _pairIndex,
+        uint8 _index,
+        uint256 _collateralToClose
+    ) external onlyCallbacks {
+        //@note
+        //Intention
+        //  1) Guard: return if trade is empty (leverage == 0)
+        //  2) Decrease pair open interest: (i.oiNotional * _collateralToClose) / t.collateral
+        //  3) If _collateralToClose != t.collateral -> partial close
+        //  4) Else                                  -> full close
+        //      4.1) If openTradesCount == 1 (close last trade) -> remove trader from pairTraders
+        //      4.2) Delete trade, tradeInfo. Decrease trade counter.
+
+        //1 {
         Trade storage t = openTrades[_trader][_pairIndex][_index];
         TradeInfo storage i = openTradesInfo[_trader][_pairIndex][_index];
         if (t.leverage == 0) return;
+        //} 1
 
-        uint256 oiNotionalToClose = i.oiNotional * _collateralToClose / t.collateral;
+        //2 {
+        uint256 oiNotionalToClose = (i.oiNotional * _collateralToClose) /
+            t.collateral;
         updateOpenInterest(_pairIndex, oiNotionalToClose, false, t.buy);
+        //} 2
 
+        //3 {
         if (_collateralToClose != t.collateral) {
             t.collateral = t.collateral - _collateralToClose;
             i.oiNotional = i.oiNotional - oiNotionalToClose;
             i.beingMarketClosed = false;
             return;
         }
+        //} 3
 
+        //4 {
+        //4.1 {
         if (openTradesCount[_trader][_pairIndex] == 1) {
             uint256 _pairTradersId = pairTradersId[_trader][_pairIndex];
             address[] storage p = pairTraders[_pairIndex];
@@ -212,12 +292,16 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
             delete pairTradersId[_trader][_pairIndex];
             p.pop();
         }
+        //} 4.1
 
+        //4.2 {
         delete openTrades[_trader][_pairIndex][_index];
         delete openTradesInfo[_trader][_pairIndex][_index];
 
         --openTradesCount[_trader][_pairIndex];
         --totalOpenTradesCount;
+        //} 4.2
+        //} 4
     }
 
     function storePendingMarketOrder(
@@ -226,60 +310,149 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         bool _open,
         BuilderFee calldata bf
     ) external onlyTrading {
-        pendingOrderIds[_order.trade.trader].push(_id);
+        //@note
+        //Intention
+        //  1) Store new pending order
+        //      - push id to id list
+        //      - store new pending order
+        //      - store creation block number
+        //  2) If open       -> increment pending open count and store builder fee data
+        //     Else (close)  -> increment pending close count and mark the trade as `beingMarketClosed` to lock it
+        //Audit
+        //  1) No matter what `_order.block` is, it will be overwritten immediately after
+        //  M) 1) `pendingOrderIds` array can grow unbounded -> could cause DoS in `unregisterPendingMarketOrder` which iterates over it
+        //Follow-up
+        //  override builder data
 
+        //1 {
+        pendingOrderIds[_order.trade.trader].push(_id);
         reqID_pendingMarketOrder[_id] = _order;
         reqID_pendingMarketOrder[_id].block = ChainUtils.getBlockNumber();
+        //} 1
 
+        //2 {
         if (_open) {
-            pendingMarketOpenCount[_order.trade.trader][_order.trade.pairIndex]++;
+            pendingMarketOpenCount[_order.trade.trader][
+                _order.trade.pairIndex
+            ]++;
             builderData[_order.trade.trader][_order.trade.pairIndex][_id] = bf;
         } else {
-            pendingMarketCloseCount[_order.trade.trader][_order.trade.pairIndex]++;
-            openTradesInfo[_order.trade.trader][_order.trade.pairIndex][_order.trade.index].beingMarketClosed = true;
+            pendingMarketCloseCount[_order.trade.trader][
+                _order.trade.pairIndex
+            ]++;
+            openTradesInfo[_order.trade.trader][_order.trade.pairIndex][
+                _order.trade.index
+            ].beingMarketClosed = true;
         }
+        //} 2
     }
 
-    function unregisterPendingMarketOrder(uint256 _id, bool _open) external onlyTradingOrCallbacks {
+    function unregisterPendingMarketOrder(
+        uint256 _id,
+        bool _open
+    ) external onlyTradingOrCallbacks {
+        //@note
+        //Intention
+        //  Iterate through `orderIds` of the trader until `_id` is found
+        //      1) If found -> Process
+        //         1.1) If open      -> decrement pending open count and clear builder data
+        //              Else (close) -> decrement pending close count and unlock trade (`beingMarketClosed = false`)
+        //         1.2) Remove `_id` from `pendingOrderIds`
+        //         1.3) Delete reqID_pendingMarketOrder[_id]
+        //Assumption
+        //  Don't revert if fail
+        //Audit
+        //  1) Unbounded loop over `pendingOrderIds`
+        //      -> could revert with Out of Gas if the array is too large
+
         PendingMarketOrderV2 memory _order = reqID_pendingMarketOrder[_id];
         uint256[] storage orderIds = pendingOrderIds[_order.trade.trader];
 
         for (uint256 i = 0; i < orderIds.length; i++) {
             if (orderIds[i] == _id) {
+                //1.1 {
                 if (_open) {
-                    pendingMarketOpenCount[_order.trade.trader][_order.trade.pairIndex]--;
-                    delete builderData[_order.trade.trader][_order.trade.pairIndex][_id];
+                    pendingMarketOpenCount[_order.trade.trader][
+                        _order.trade.pairIndex
+                    ]--;
+                    delete builderData[_order.trade.trader][
+                        _order.trade.pairIndex
+                    ][_id];
                 } else {
-                    pendingMarketCloseCount[_order.trade.trader][_order.trade.pairIndex]--;
-                    openTradesInfo[_order.trade.trader][_order.trade.pairIndex][_order.trade.index].beingMarketClosed =
-                        false;
+                    pendingMarketCloseCount[_order.trade.trader][
+                        _order.trade.pairIndex
+                    ]--;
+                    openTradesInfo[_order.trade.trader][_order.trade.pairIndex][
+                        _order.trade.index
+                    ].beingMarketClosed = false;
                 }
+                //} 1.1
 
+                //1.2 {
                 orderIds[i] = orderIds[orderIds.length - 1];
                 orderIds.pop();
+                //} 1.2
 
+                //1.3
                 delete reqID_pendingMarketOrder[_id];
                 return;
             }
         }
     }
 
-    function updateOpenInterest(uint16 _pairIndex, uint256 _oiNotional, bool _open, bool _long) private {
+    function updateOpenInterest(
+        uint16 _pairIndex,
+        uint256 _oiNotional,
+        bool _open,
+        bool _long
+    ) private {
+        //@note
+        //Intention
+        //  1) Determine index in o = [long, short, max]
+        //      - index = 0/1 (long/short)
+        //  2)  if open trade -> o[index] += _oiNotional
+        //      else          -> o[index] -= _oiNotional
+        //Assumption
+        //  Caller (e.g. trading logic) has already enforced the `maxOpenInterest` check before storing the trade
+
         uint256 index = _long ? 0 : 1;
         uint256[3] storage o = openInterest[_pairIndex];
         o[index] = _open ? o[index] + _oiNotional : o[index] - _oiNotional;
     }
 
-    function storeOpenLimitOrder(OpenLimitOrder calldata o, BuilderFee calldata bf) external onlyTrading {
+    //OpenLimitOrder {                            | BuilderFee {
+    //    uint256 collateral; // PRECISION_6      |    address builder;
+    //    uint192 targetPrice; // PRECISION_18    |    uint32 builderFee; // PRECISION_6
+    //    uint192 tp; // PRECISION_18             | }
+    //    uint192 sl; // PRECISION_18
+    //    address trader;
+    //    uint32 leverage; // PRECISION_2
+    //    uint32 createdAt; // block.timestamp
+    //    uint32 lastUpdated; // block.timestamp
+    //    uint16 pairIndex;
+    //    OpenOrderType orderType;
+    //    uint8 index;
+    //    bool buy;
+    //}
+    function storeOpenLimitOrder(
+        OpenLimitOrder calldata o,
+        BuilderFee calldata bf
+    ) external onlyTrading {
         pairLimitOrders[o.pairIndex].push(o);
-        openLimitOrderIds[o.trader][o.pairIndex][o.index] = pairLimitOrders[o.pairIndex].length - 1;
+        openLimitOrderIds[o.trader][o.pairIndex][o.index] =
+            pairLimitOrders[o.pairIndex].length -
+            1;
         openLimitOrdersCount[o.trader][o.pairIndex]++;
         builderData[o.trader][o.pairIndex][o.index] = bf;
     }
 
-    function updateOpenLimitOrder(OpenLimitOrder calldata _o) external onlyTrading {
+    function updateOpenLimitOrder(
+        OpenLimitOrder calldata _o
+    ) external onlyTrading {
         if (!hasOpenLimitOrder(_o.trader, _o.pairIndex, _o.index)) return;
-        OpenLimitOrder storage o = pairLimitOrders[_o.pairIndex][openLimitOrderIds[_o.trader][_o.pairIndex][_o.index]];
+        OpenLimitOrder storage o = pairLimitOrders[_o.pairIndex][
+            openLimitOrderIds[_o.trader][_o.pairIndex][_o.index]
+        ];
         o.collateral = _o.collateral;
         o.buy = _o.buy;
         o.leverage = _o.leverage;
@@ -290,16 +463,20 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         o.lastUpdated = uint32(block.timestamp);
     }
 
-    function unregisterOpenLimitOrder(address _trader, uint16 _pairIndex, uint8 _index)
-        external
-        onlyTradingOrCallbacks
-    {
+    function unregisterOpenLimitOrder(
+        address _trader,
+        uint16 _pairIndex,
+        uint8 _index
+    ) external onlyTradingOrCallbacks {
         if (!hasOpenLimitOrder(_trader, _pairIndex, _index)) return;
 
         uint256 id = openLimitOrderIds[_trader][_pairIndex][_index];
-        pairLimitOrders[_pairIndex][id] = pairLimitOrders[_pairIndex][pairLimitOrders[_pairIndex].length - 1];
-        openLimitOrderIds[pairLimitOrders[_pairIndex][id].trader][pairLimitOrders[_pairIndex][id].pairIndex][pairLimitOrders[_pairIndex][id]
-            .index] = id;
+        pairLimitOrders[_pairIndex][id] = pairLimitOrders[_pairIndex][
+            pairLimitOrders[_pairIndex].length - 1
+        ];
+        openLimitOrderIds[pairLimitOrders[_pairIndex][id].trader][
+            pairLimitOrders[_pairIndex][id].pairIndex
+        ][pairLimitOrders[_pairIndex][id].index] = id;
 
         delete openLimitOrderIds[_trader][_pairIndex][_index];
         delete builderData[_trader][_pairIndex][_index];
@@ -308,11 +485,14 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         openLimitOrdersCount[_trader][_pairIndex]--;
     }
 
-    function setTrigger(address _trader, uint16 _pairIndex, uint8 _index, IOstiumTradingStorage.LimitOrder _orderType)
-        external
-        onlyTrading
-    {
-        orderTriggerBlock[_trader][_pairIndex][_index][_orderType] = ChainUtils.getBlockNumber();
+    function setTrigger(
+        address _trader,
+        uint16 _pairIndex,
+        uint8 _index,
+        IOstiumTradingStorage.LimitOrder _orderType
+    ) external onlyTrading {
+        orderTriggerBlock[_trader][_pairIndex][_index][_orderType] = ChainUtils
+            .getBlockNumber();
     }
 
     function unregisterTrigger(
@@ -324,22 +504,34 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         delete orderTriggerBlock[_trader][_pairIndex][_index][_orderType];
     }
 
-    function storePendingAutomationOrder(PendingAutomationOrder calldata _automationOrder, uint256 _orderId)
-        external
-        onlyTrading
-    {
+    function storePendingAutomationOrder(
+        PendingAutomationOrder calldata _automationOrder,
+        uint256 _orderId
+    ) external onlyTrading {
         reqID_pendingAutomationOrder[_orderId] = _automationOrder;
     }
 
-    function unregisterPendingAutomationOrder(uint256 _orderId) external onlyCallbacks {
+    function unregisterPendingAutomationOrder(
+        uint256 _orderId
+    ) external onlyCallbacks {
         delete reqID_pendingAutomationOrder[_orderId];
     }
 
-    function updateSl(address _trader, uint16 _pairIndex, uint8 _index, uint256 _newSl) external onlyTrading {
+    function updateSl(
+        address _trader,
+        uint16 _pairIndex,
+        uint8 _index,
+        uint256 _newSl
+    ) external onlyTrading {
         _updateSl(_trader, _pairIndex, _index, _newSl);
     }
 
-    function _updateSl(address _trader, uint16 _pairIndex, uint8 _index, uint256 _newSl) internal {
+    function _updateSl(
+        address _trader,
+        uint16 _pairIndex,
+        uint8 _index,
+        uint256 _newSl
+    ) internal {
         if (_newSl > type(uint192).max) {
             revert WrongParams();
         }
@@ -350,11 +542,21 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         i.slLastUpdated = block.timestamp.toUint32();
     }
 
-    function updateTp(address _trader, uint16 _pairIndex, uint8 _index, uint256 _newTp) external onlyTrading {
+    function updateTp(
+        address _trader,
+        uint16 _pairIndex,
+        uint8 _index,
+        uint256 _newTp
+    ) external onlyTrading {
         _updateTp(_trader, _pairIndex, _index, _newTp);
     }
 
-    function _updateTp(address _trader, uint16 _pairIndex, uint8 _index, uint256 _newTp) internal {
+    function _updateTp(
+        address _trader,
+        uint16 _pairIndex,
+        uint8 _index,
+        uint256 _newTp
+    ) internal {
         if (_newTp > type(uint192).max) {
             revert WrongParams();
         }
@@ -366,8 +568,12 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
     }
 
     function updateTrade(Trade calldata _t) external onlyTradingOrCallbacks {
-        IOstiumTradingStorage.Trade storage t = openTrades[_t.trader][_t.pairIndex][_t.index];
-        IOstiumTradingStorage.TradeInfo storage i = openTradesInfo[_t.trader][_t.pairIndex][_t.index];
+        IOstiumTradingStorage.Trade storage t = openTrades[_t.trader][
+            _t.pairIndex
+        ][_t.index];
+        IOstiumTradingStorage.TradeInfo storage i = openTradesInfo[_t.trader][
+            _t.pairIndex
+        ][_t.index];
 
         if (t.leverage == 0) {
             return;
@@ -393,17 +599,25 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         uint32 leverage,
         bool isBuy
     ) external onlyCallbacks returns (uint256 devFee, uint256 vaultFee) {
-        uint256 oiLong = openInterest[_pairIndex][0] * latestPrice / PRECISION_18 / 1e12;
-        uint256 oiShort = openInterest[_pairIndex][1] * latestPrice / PRECISION_18 / 1e12;
+        uint256 oiLong = (openInterest[_pairIndex][0] * latestPrice) /
+            PRECISION_18 /
+            1e12;
+        uint256 oiShort = (openInterest[_pairIndex][1] * latestPrice) /
+            PRECISION_18 /
+            1e12;
 
         int256 oiDelta = oiLong.toInt256() - oiShort.toInt256();
 
-        (devFee, vaultFee) = IOstiumPairInfos(registry.getContractAddress('pairInfos')).getOpeningFee(
-            _pairIndex,
-            isBuy ? _leveragedPositionSize.toInt256() : -_leveragedPositionSize.toInt256(),
-            leverage,
-            oiDelta
-        );
+        (devFee, vaultFee) = IOstiumPairInfos(
+            registry.getContractAddress("pairInfos")
+        ).getOpeningFee(
+                _pairIndex,
+                isBuy
+                    ? _leveragedPositionSize.toInt256()
+                    : -_leveragedPositionSize.toInt256(),
+                leverage,
+                oiDelta
+            );
 
         devFees += devFee;
     }
@@ -429,7 +643,11 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         SafeERC20.safeTransfer(IERC20(usdc), registry.dev(), _amount);
     }
 
-    function transferUsdc(address _from, address _to, uint256 _amount) external onlyTradingOrCallbacks {
+    function transferUsdc(
+        address _from,
+        address _to,
+        uint256 _amount
+    ) external onlyTradingOrCallbacks {
         if (_from == address(this)) {
             SafeERC20.safeTransfer(IERC20(usdc), _to, _amount);
         } else {
@@ -437,7 +655,17 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         }
     }
 
-    function firstEmptyTradeIndex(address _trader, uint16 _pairIndex) public view returns (uint8) {
+    function firstEmptyTradeIndex(
+        address _trader,
+        uint16 _pairIndex
+    ) public view returns (uint8) {
+        //@note
+        //Intention
+        //  Loop through indices until reach empty index
+        //Assumption
+        //  leverage == 0 -> this slot is empty
+        //  maxTradesPerPair prevent DOS?
+
         for (uint8 i = 0; i < maxTradesPerPair; i++) {
             if (openTrades[_trader][_pairIndex][i].leverage == 0) {
                 return i;
@@ -446,7 +674,10 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         revert NotEmptyIndex();
     }
 
-    function firstEmptyOpenLimitIndex(address _trader, uint16 _pairIndex) external view returns (uint8) {
+    function firstEmptyOpenLimitIndex(
+        address _trader,
+        uint16 _pairIndex
+    ) external view returns (uint8) {
         for (uint8 i = 0; i < maxTradesPerPair; i++) {
             if (!hasOpenLimitOrder(_trader, _pairIndex, i)) {
                 return i;
@@ -455,94 +686,137 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         revert NotEmptyIndex();
     }
 
-    function hasOpenLimitOrder(address _trader, uint16 _pairIndex, uint8 _index) public view returns (bool) {
+    function hasOpenLimitOrder(
+        address _trader,
+        uint16 _pairIndex,
+        uint8 _index
+    ) public view returns (bool) {
+        //@note
+        //Follow-up
+        //  A) trader != _trader (or any faily similar) doesn't mean pairLimitOrders[...] is empty
+        //      -> This function don't check it. It check local index (orderIndex) of trader
+        //          NOTICE: orderIndex here != MARKET orderId managed by PriceRouter
+
         if (pairLimitOrders[_pairIndex].length == 0) return false;
-        OpenLimitOrder storage o = pairLimitOrders[_pairIndex][openLimitOrderIds[_trader][_pairIndex][_index]];
-        return o.trader == _trader && o.pairIndex == _pairIndex && o.index == _index;
+        OpenLimitOrder storage o = pairLimitOrders[_pairIndex][
+            openLimitOrderIds[_trader][_pairIndex][_index]
+        ];
+        return
+            o.trader == _trader &&
+            o.pairIndex == _pairIndex &&
+            o.index == _index;
     }
 
-    function pairTradersArray(uint16 _pairIndex) external view returns (address[] memory) {
+    function pairTradersArray(
+        uint16 _pairIndex
+    ) external view returns (address[] memory) {
         return pairTraders[_pairIndex];
     }
 
-    function pairTradersCount(uint16 _pairIndex) external view returns (uint256) {
+    function pairTradersCount(
+        uint16 _pairIndex
+    ) external view returns (uint256) {
         return pairTraders[_pairIndex].length;
     }
 
-    function getPendingOrderIds(address _trader) external view returns (uint256[] memory) {
+    function getPendingOrderIds(
+        address _trader
+    ) external view returns (uint256[] memory) {
         return pendingOrderIds[_trader];
     }
 
-    function pendingOrderIdsCount(address _trader) external view returns (uint256) {
+    function pendingOrderIdsCount(
+        address _trader
+    ) external view returns (uint256) {
         return pendingOrderIds[_trader].length;
     }
 
-    function getOpenLimitOrder(address _trader, uint16 _pairIndex, uint8 _index)
-        external
-        view
-        returns (OpenLimitOrder memory)
-    {
+    function getOpenLimitOrder(
+        address _trader,
+        uint16 _pairIndex,
+        uint8 _index
+    ) external view returns (OpenLimitOrder memory) {
         if (!hasOpenLimitOrder(_trader, _pairIndex, _index)) {
             revert NoOpenLimitOrder(_trader, _pairIndex, _index);
         }
-        return pairLimitOrders[_pairIndex][openLimitOrderIds[_trader][_pairIndex][_index]];
+        return
+            pairLimitOrders[_pairIndex][
+                openLimitOrderIds[_trader][_pairIndex][_index]
+            ];
     }
 
-    function getOpenLimitOrderByIndex(uint16 _pairIndex, uint256 _index)
-        external
-        view
-        returns (OpenLimitOrder memory)
-    {
+    function getOpenLimitOrderByIndex(
+        uint16 _pairIndex,
+        uint256 _index
+    ) external view returns (OpenLimitOrder memory) {
         if (_index >= pairLimitOrders[_pairIndex].length) {
             revert WrongParams();
         }
         return pairLimitOrders[_pairIndex][_index];
     }
 
-    function getOpenLimitOrders(uint16 _pairIndex) external view returns (OpenLimitOrder[] memory) {
+    function getOpenLimitOrders(
+        uint16 _pairIndex
+    ) external view returns (OpenLimitOrder[] memory) {
         return pairLimitOrders[_pairIndex];
     }
 
-    function getOpenTrade(address _trader, uint16 _pairIndex, uint8 _index) external view returns (Trade memory) {
+    function getOpenTrade(
+        address _trader,
+        uint16 _pairIndex,
+        uint8 _index
+    ) external view returns (Trade memory) {
         return openTrades[_trader][_pairIndex][_index];
     }
 
-    function getOpenTradeInfo(address _trader, uint16 _pairIndex, uint8 _index)
-        external
-        view
-        returns (TradeInfo memory)
-    {
+    function getOpenTradeInfo(
+        address _trader,
+        uint16 _pairIndex,
+        uint8 _index
+    ) external view returns (TradeInfo memory) {
         return openTradesInfo[_trader][_pairIndex][_index];
     }
 
-    function getPairOpeningInterestInfo(uint16 _pairIndex) external view returns (uint256, uint256, uint256) {
-        return (openInterest[_pairIndex][0], openInterest[_pairIndex][1], openInterest[_pairIndex][2]);
+    function getPairOpeningInterestInfo(
+        uint16 _pairIndex
+    ) external view returns (uint256, uint256, uint256) {
+        return (
+            openInterest[_pairIndex][0],
+            openInterest[_pairIndex][1],
+            openInterest[_pairIndex][2]
+        );
     }
 
-    function totalOpenLimitOrders(uint16 pairIndex) external view returns (uint256) {
+    function totalOpenLimitOrders(
+        uint16 pairIndex
+    ) external view returns (uint256) {
         return pairLimitOrders[pairIndex].length;
     }
 
-    function storePendingRemoveCollateral(PendingRemoveCollateral calldata request, uint256 orderId)
-        external
-        onlyTrading
-    {
+    function storePendingRemoveCollateral(
+        PendingRemoveCollateral calldata request,
+        uint256 orderId
+    ) external onlyTrading {
         reqID_pendingRemoveCollateral[orderId] = request;
     }
 
-    function getPendingRemoveCollateral(uint256 orderId) external view returns (PendingRemoveCollateral memory) {
+    function getPendingRemoveCollateral(
+        uint256 orderId
+    ) external view returns (PendingRemoveCollateral memory) {
         return reqID_pendingRemoveCollateral[orderId];
     }
 
-    function unregisterPendingRemoveCollateral(uint256 orderId) external onlyCallbacks {
+    function unregisterPendingRemoveCollateral(
+        uint256 orderId
+    ) external onlyCallbacks {
         delete reqID_pendingRemoveCollateral[orderId];
     }
 
-    function getBuilderData(address _trader, uint16 _pairIndex, uint256 _index)
-        external
-        view
-        returns (BuilderFee memory)
-    {
+    function getBuilderData(
+        address _trader,
+        uint16 _pairIndex,
+        uint256 _index
+    ) external view returns (BuilderFee memory) {
         return builderData[_trader][_pairIndex][_index];
     }
 }

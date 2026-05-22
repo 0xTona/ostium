@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import './interfaces/IOstiumRegistry.sol';
-import './interfaces/IOstiumPriceUpKeep.sol';
-import './interfaces/IOstiumPriceRouter.sol';
+import "./interfaces/IOstiumRegistry.sol";
+import "./interfaces/IOstiumPriceUpKeep.sol";
+import "./interfaces/IOstiumPriceRouter.sol";
 
-import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 contract OstiumPriceRouter is IOstiumPriceRouter, Initializable {
     IOstiumRegistry public registry;
@@ -19,11 +19,16 @@ contract OstiumPriceRouter is IOstiumPriceRouter, Initializable {
         _disableInitializers();
     }
 
-    function initialize(IOstiumRegistry _registry, uint32 _maxTsValidity, uint256 _currentOrderId)
-        external
-        initializer
-    {
-        if (address(_registry) == address(0) || _maxTsValidity > MAX_TS_VALIDITY || _maxTsValidity == 0) {
+    function initialize(
+        IOstiumRegistry _registry,
+        uint32 _maxTsValidity,
+        uint256 _currentOrderId
+    ) external initializer {
+        if (
+            address(_registry) == address(0) ||
+            _maxTsValidity > MAX_TS_VALIDITY ||
+            _maxTsValidity == 0
+        ) {
             revert WrongParams();
         }
 
@@ -49,7 +54,7 @@ contract OstiumPriceRouter is IOstiumPriceRouter, Initializable {
     }
 
     function _onlyTrading() private view {
-        if (msg.sender != registry.getContractAddress('trading')) {
+        if (msg.sender != registry.getContractAddress("trading")) {
             revert NotTrading(msg.sender);
         }
     }
@@ -67,20 +72,29 @@ contract OstiumPriceRouter is IOstiumPriceRouter, Initializable {
         emit MaxTsValidityUpdated(value);
     }
 
-    function getPrice(uint16 pairIndex, IOstiumPriceUpKeep.OrderType orderType, uint256 timestamp)
-        external
-        onlyTrading
-        returns (uint256)
-    {
+    function getPrice(
+        uint16 pairIndex,
+        IOstiumPriceUpKeep.OrderType orderType,
+        uint256 timestamp
+    ) external onlyTrading returns (uint256) {
+        //@note
+        //Audit
+        //  Each pair oracle
+
         if (block.timestamp - timestamp > maxTsValidity) {
             revert WrongTimestamp();
         }
 
         ++currentOrderId;
-        string memory priceUpkeepType =
-            IOstiumPairsStorage(registry.getContractAddress('pairsStorage')).oracle(pairIndex);
+        string memory priceUpkeepType = IOstiumPairsStorage(
+            registry.getContractAddress("pairsStorage")
+        ).oracle(pairIndex);
         IOstiumPriceUpKeep(
-            payable(registry.getContractAddress(bytes32(abi.encodePacked(priceUpkeepType, 'PriceUpkeep'))))
+            payable(
+                registry.getContractAddress(
+                    bytes32(abi.encodePacked(priceUpkeepType, "PriceUpkeep"))
+                )
+            )
         ).getPrice(currentOrderId, pairIndex, orderType, timestamp);
 
         return currentOrderId;
