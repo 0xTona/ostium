@@ -14,12 +14,7 @@ import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 pragma solidity ^0.8.24;
 
-contract OstiumPriceUpKeep is
-    IOstiumPriceUpKeep,
-    IOstiumForwarded,
-    IPayable,
-    Initializable
-{
+contract OstiumPriceUpKeep is IOstiumPriceUpKeep, IOstiumForwarded, IPayable, Initializable {
     using SafeCast for uint256;
 
     address public FEE_ADDRESS;
@@ -32,10 +27,7 @@ contract OstiumPriceUpKeep is
         _disableInitializers();
     }
 
-    function initialize(
-        IOstiumRegistry _registry,
-        address _feeAddr
-    ) external initializer {
+    function initialize(IOstiumRegistry _registry, address _feeAddr) external initializer {
         if (address(_registry) == address(0) || _feeAddr == address(0)) {
             revert WrongParams();
         }
@@ -66,25 +58,13 @@ contract OstiumPriceUpKeep is
         }
     }
 
-    function getPrice(
-        uint256 orderId,
-        uint16 pairIndex,
-        OrderType orderType,
-        uint256 timestamp
-    ) external onlyRouter {
+    function getPrice(uint256 orderId, uint16 pairIndex, OrderType orderType, uint256 timestamp) external onlyRouter {
         if (orders[orderId].initiated) {
             revert AlreadyInitiated(orderId);
         }
-        bytes32 feed = IOstiumPairsStorage(
-            registry.getContractAddress("pairsStorage")
-        ).pairFeed(pairIndex);
+        bytes32 feed = IOstiumPairsStorage(registry.getContractAddress("pairsStorage")).pairFeed(pairIndex);
 
-        orders[orderId] = Order(
-            timestamp.toUint32(),
-            pairIndex,
-            orderType,
-            true
-        );
+        orders[orderId] = Order(timestamp.toUint32(), pairIndex, orderType, true);
 
         emit PriceRequested(orderId, feed, timestamp);
     }
@@ -110,10 +90,7 @@ contract OstiumPriceUpKeep is
         }
         //} 1
 
-        (bytes memory chainlinkReport, uint256 orderId) = abi.decode(
-            performData,
-            (bytes, uint256)
-        );
+        (bytes memory chainlinkReport, uint256 orderId) = abi.decode(performData, (bytes, uint256));
 
         Order memory order = orders[orderId];
 
@@ -123,31 +100,18 @@ contract OstiumPriceUpKeep is
         }
         //} 2
 
-        (, bytes memory reportData) = abi.decode(
-            chainlinkReport,
-            (bytes32[3], bytes)
-        );
+        (, bytes memory reportData) = abi.decode(chainlinkReport, (bytes32[3], bytes));
 
-        IVerifierProxy verifierProxy = IVerifierProxy(
-            registry.getContractAddress("chainlinkVerifierProxy")
-        );
+        IVerifierProxy verifierProxy = IVerifierProxy(registry.getContractAddress("chainlinkVerifierProxy"));
 
-        IFeeManager feeManager = IFeeManager(
-            address(verifierProxy.s_feeManager())
-        );
+        IFeeManager feeManager = IFeeManager(address(verifierProxy.s_feeManager()));
 
         //3
-        (IFeeManager.Asset memory fee, , ) = feeManager.getFeeAndReward(
-            address(this),
-            reportData,
-            FEE_ADDRESS
-        );
+        (IFeeManager.Asset memory fee,,) = feeManager.getFeeAndReward(address(this), reportData, FEE_ADDRESS);
 
         //4
-        bytes memory verifierResponse = verifierProxy.verify{value: fee.amount}(
-            chainlinkReport,
-            abi.encode(FEE_ADDRESS)
-        );
+        bytes memory verifierResponse =
+            verifierProxy.verify{value: fee.amount}(chainlinkReport, abi.encode(FEE_ADDRESS));
 
         bytes32 reportFeedId;
         uint32 validFromTimestamp;
@@ -159,41 +123,13 @@ contract OstiumPriceUpKeep is
         bytes32 feedId;
         a.orderId = orderId;
         a.isDayTradingClosed = false;
-        feedId = IOstiumPairsStorage(
-            registry.getContractAddress("pairsStorage")
-        ).pairFeed(order.pairIndex);
+        feedId = IOstiumPairsStorage(registry.getContractAddress("pairsStorage")).pairFeed(order.pairIndex);
 
-        (
-            reportFeedId,
-            validFromTimestamp,
-            observationsTimestamp,
-            nativeFee,
-            ,
-            ,
-            a.price,
-            a.bid,
-            a.ask
-        ) = abi.decode(
-            verifierResponse,
-            (
-                bytes32,
-                uint32,
-                uint32,
-                uint192,
-                uint192,
-                uint32,
-                int192,
-                int192,
-                int192
-            )
-        );
+        (reportFeedId, validFromTimestamp, observationsTimestamp, nativeFee,,, a.price, a.bid, a.ask) =
+            abi.decode(verifierResponse, (bytes32, uint32, uint32, uint192, uint192, uint32, int192, int192, int192));
 
         //5
-        if (
-            order.timestamp < validFromTimestamp ||
-            order.timestamp > observationsTimestamp ||
-            feedId != reportFeedId
-        ) {
+        if (order.timestamp < validFromTimestamp || order.timestamp > observationsTimestamp || feedId != reportFeedId) {
             revert InvalidPrice(orderId);
         }
 
@@ -203,12 +139,17 @@ contract OstiumPriceUpKeep is
         emit PriceReceived(orderId, order.pairIndex, a.price, nativeFee);
     }
 
+    // PriceUpKeepAnswer {
+    //     uint256 orderId;
+    //     int192 price;
+    //     int192 bid;
+    //     int192 ask;
+    //     bool isDayTradingClosed;
+    // }
     function fulfill(PriceUpKeepAnswer memory a) internal {
         Order memory r = orders[a.orderId];
 
-        IOstiumTradingCallbacks c = IOstiumTradingCallbacks(
-            registry.getContractAddress("callbacks")
-        );
+        IOstiumTradingCallbacks c = IOstiumTradingCallbacks(registry.getContractAddress("callbacks"));
 
         if (r.orderType == OrderType.MARKET_OPEN) {
             c.openTradeMarketCallback(a);
@@ -232,9 +173,7 @@ contract OstiumPriceUpKeep is
         emit ForwarderAdded(forwarderAddress);
     }
 
-    function registerForwarders(
-        address[] calldata forwarderAddresses
-    ) external onlyGov {
+    function registerForwarders(address[] calldata forwarderAddresses) external onlyGov {
         for (uint256 i = 0; i < forwarderAddresses.length; i++) {
             registerForwarder(forwarderAddresses[i]);
         }
@@ -248,18 +187,13 @@ contract OstiumPriceUpKeep is
         emit ForwarderRemoved(forwarderAddress);
     }
 
-    function unregisterForwarders(
-        address[] calldata forwarderAddresses
-    ) external onlyGov {
+    function unregisterForwarders(address[] calldata forwarderAddresses) external onlyGov {
         for (uint256 i = 0; i < forwarderAddresses.length; i++) {
             unregisterForwarder(forwarderAddresses[i]);
         }
     }
 
-    function withdrawEth(
-        address payable _to,
-        uint256 _amount
-    ) external onlyGov {
+    function withdrawEth(address payable _to, uint256 _amount) external onlyGov {
         if (_amount == 0 || _to == address(0)) {
             revert WrongParams();
         }
