@@ -75,25 +75,35 @@ stateDiagram-v2
 
 ```mermaid
 sequenceDiagram
-    participant User
-    participant OstiumTrading
-    participant TradingStorage
-    participant Keeper
-    participant PriceUpKeep
-    participant Callbacks
+    autonumber
 
-    Note over User, TradingStorage: Phase 1: Order / Intent (Synchronous)
-    User->>OstiumTrading: openTrade() / closeTrade()
-    OstiumTrading->>TradingStorage: Store Pending Order / Store Limit Order
-    OstiumTrading-->>User: Tx Success (Order Queued)
+    alt Path A: Market Order
+        Note over Trader, OstiumPriceRouter: Phase 1: Intent (Synchronous)
+        Trader->>OstiumTrading: "openTrade() / closeTradeMarket()"
+        OstiumTrading->>OstiumTradingStorage: Store Pending Market Order
+        OstiumTrading->>OstiumPriceRouter: Request Price
 
-    Note over User, Callbacks: --- Gap (waiting for oracle price or trigger) ---
+        Note over OstiumPriceUpKeep, OstiumVault: Phase 2: Off-chain Execution (Asynchronous)
+        OstiumPriceUpKeep->>OstiumTradingCallbacks: Deliver Price + Signature
+        OstiumTradingCallbacks->>OstiumVerifier: Verify Signature
+        OstiumTradingCallbacks->>OstiumTradingStorage: Execute (Store/Remove Trade, Update OI)
+        OstiumTradingCallbacks->>OstiumVault: Settle PnL (sendAssets/receiveAssets)
 
-    Note over Keeper, Callbacks: Phase 2: Execution (Asynchronous)
-    Keeper->>PriceUpKeep: performUpkeep(signed price)
-    PriceUpKeep->>Callbacks: Route verified price
-    Callbacks->>TradingStorage: Finalize Trade (register/unregister)
-    Callbacks-->>Keeper: Tx Success (Trade Active/Closed)
+    else Path B: Limit Order / Automation
+        Note over Trader, OstiumTradingStorage: Phase 1: Placement (Synchronous)
+        Trader->>OstiumTrading: "openTrade() (Limit Order)"
+        OstiumTrading->>OstiumTradingStorage: Store OpenLimitOrder
+
+        Note over OstiumTradesUpKeep, OstiumVault: Phase 2: Off-chain Execution (Asynchronous)
+        OstiumTradesUpKeep->>OstiumTrading: "executeAutomationOrder() (Limit/TP/SL/LIQ)"
+        OstiumTrading->>OstiumTradingStorage: Lock Order / Set Trigger
+        OstiumTrading->>OstiumPriceRouter: Request Price
+
+        OstiumPriceUpKeep->>OstiumTradingCallbacks: Deliver Price + Signature
+        OstiumTradingCallbacks->>OstiumVerifier: Verify Signature
+        OstiumTradingCallbacks->>OstiumTradingStorage: Execute (Store/Remove Trade, Update OI)
+        OstiumTradingCallbacks->>OstiumVault: Settle PnL (sendAssets/receiveAssets)
+    end
 ```
 
 ## Actors & Roles
