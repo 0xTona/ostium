@@ -71,6 +71,31 @@ stateDiagram-v2
     PendingAutomationClose --> Closed : executeAutomationCloseOrderCallback()
 ```
 
+### 3. Two-Phase Execution Model
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant OstiumTrading
+    participant TradingStorage
+    participant Keeper
+    participant PriceUpKeep
+    participant Callbacks
+
+    Note over User, TradingStorage: Phase 1: Order / Intent (Synchronous)
+    User->>OstiumTrading: openTrade() / closeTrade()
+    OstiumTrading->>TradingStorage: Store Pending Order / Store Limit Order
+    OstiumTrading-->>User: Tx Success (Order Queued)
+
+    Note over User, Callbacks: --- Gap (waiting for oracle price or trigger) ---
+
+    Note over Keeper, Callbacks: Phase 2: Execution (Asynchronous)
+    Keeper->>PriceUpKeep: performUpkeep(signed price)
+    PriceUpKeep->>Callbacks: Route verified price
+    Callbacks->>TradingStorage: Finalize Trade (register/unregister)
+    Callbacks-->>Keeper: Tx Success (Trade Active/Closed)
+```
+
 ## Actors & Roles
 
 | Actor                       | Role                                                                                               |
