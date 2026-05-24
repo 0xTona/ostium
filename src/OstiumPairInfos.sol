@@ -426,6 +426,10 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
     }
 
     function storeAccRolloverFees(uint16 pairId) internal {
+        //@note
+        //Intention
+        //  accumulate rollover fees since last update for both long and short, then update lastUpdateBlock
+
         PairRolloverFeesV2 storage r = pairRolloverFeesV2[pairId];
 
         r.accPerOiLong = getPendingAccRolloverFees(pairId, true);
@@ -569,6 +573,16 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
     }
 
     function getPendingAccRolloverFees(uint16 pairIndex, bool long) public view returns (int256) {
+        //@note
+        //Intention
+        //  calculate pending rollover fees since last update for long/short
+        //      1) rolloverFeePerBlock:
+        //          if long -> lastLongPure + brokerPremium
+        //          else    -> -lastLongPure + brokerPremium
+        //
+        //          if !isNegativeRolloverAllowed -> max(rolloverFeePerBlock, 0)
+        //      2) currentAccRolloverFee += r.accPerOi * blockDelta
+
         PairRolloverFeesV2 memory r = pairRolloverFeesV2[pairIndex];
 
         int256 currentAccRolloverFee = long ? r.accPerOiLong : r.accPerOiShort;
@@ -584,6 +598,10 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
     }
 
     function storeAccFundingFees(uint16 pairIndex) private {
+        //@note
+        //Intention
+        //  refresh stored funding fee
+
         PairFundingFeesV2 storage f = pairFundingFees[pairIndex];
 
         (int256 accPerOiLong, int256 accPerOiShort, int64 lastFundingRate, int256 oiDelta) =
@@ -664,8 +682,8 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
         if (value.abs() < PADE_ERROR_THRESHOLD) {
             int256 threeWithPrecision = int8(3) * int64(PRECISION_18);
             int256 numeratorTmp = value + threeWithPrecision;
-            uint256 numerator = (numeratorTmp * numeratorTmp).toUint256() / PRECISION_18
-                + threeWithPrecision.toUint256();
+            uint256 numerator =
+                (numeratorTmp * numeratorTmp).toUint256() / PRECISION_18 + threeWithPrecision.toUint256();
             int256 denominatorTmp = value - threeWithPrecision;
             uint256 denominator =
                 (denominatorTmp * denominatorTmp).toUint256() / PRECISION_18 + threeWithPrecision.toUint256();
@@ -873,6 +891,11 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
         pure
         returns (uint256)
     {
+        //@note
+        //Intention
+        //  tradeValue = max(0, collateral + profit - rolloverFee - fundingFee)
+        //      profit = collateral * percentProfit / 100
+
         int256 signedCollateral = collateral.toInt256();
         int256 value =
             signedCollateral + (signedCollateral * percentProfit) / int32(PRECISION_6) / 100 - rolloverFee - fundingFee;

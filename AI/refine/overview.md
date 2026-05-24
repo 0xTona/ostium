@@ -245,3 +245,10 @@ sequenceDiagram
 | **OpenZeppelin upgradeable proxies**     | Proxy pattern (UUPS/Transparent)  | `_disableInitializers()` in constructors prevents re-initialization attacks                       |
 | **Chainlink TradesUpKeep**               | Automation bot                    | Must run reliably; if down, TP/SL/LIQ orders won't fire (stuck positions)                         |
 | **`registry.getContractAddress()`**      | On-chain address routing          | Gov-controlled; a malicious registry update can re-route all fund flows                           |
+
+---
+
+## Note
+
+- Funding fee is deprecated
+- Rollover fee lastLongPure is updated by the manager only, not dynamically scaled based on OI imbalance like other perpetual protocols

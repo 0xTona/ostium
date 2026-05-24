@@ -65,6 +65,14 @@ library TradingCallbacksLib {
         int32 leverage,
         int32 initialLeverage
     ) internal pure returns (int256 p, int256 maxPnlP) {
+        //@note
+        //Intention
+        //  maxPnlP = 900% * leverage / max(leverage, initialLeverage)
+        //  p = |currentPrice - openPrice| * leverage / openPrice
+        //  p = max(p, maxPnlP)
+        //Audit
+        //  round down to zero?
+
         maxPnlP = (int16(MAX_GAIN_P) * int32(PRECISION_6) * int256(leverage))
             / (leverage > initialLeverage ? leverage : initialLeverage);
 

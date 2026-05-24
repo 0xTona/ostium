@@ -114,30 +114,48 @@ library TradingLib {
         uint256 triggerTimeout,
         uint16 closePercentage
     ) external view {
+        //@note
+        //Intention
+        //  1) trade existed
+        //  2) don't exceed maxPendingMarketOrders
+        //  3) no pending triggers
+        //      Note: in any orderType
+        //  4) market is not closed
+        //  5) only fully close OR partially close but remainning notional > minLevPos
+
+        //1 {
         if (t.leverage == 0) {
             revert IOstiumTrading.NoTradeFound(sender, t.pairIndex, t.index);
         }
+        //} 1
 
+        //2 {
         if (storageT.pendingOrderIdsCount(sender) >= storageT.maxPendingMarketOrders()) {
             revert IOstiumTrading.MaxPendingMarketOrdersReached(sender);
         }
+        //} 2
 
+        //3 {
         if (!checkNoPendingTriggers(storageT, sender, t.pairIndex, t.index, triggerTimeout)) {
             revert IOstiumTrading.TriggerPending(sender, t.pairIndex, t.index);
         }
+        //} 3
 
+        //4 {
         if (i.beingMarketClosed) {
             revert IOstiumTrading.AlreadyMarketClosed(sender, t.pairIndex, t.index);
         }
+        //} 4
 
+        //5 {
         uint256 remainingCollateral = (t.collateral * (PERCENT_BASE - closePercentage)) / 100e2;
-
         if (
             closePercentage != PERCENT_BASE
                 && (remainingCollateral * t.leverage) / 100 < pairsStorage.pairMinLevPos(t.pairIndex)
         ) {
             revert IOstiumTrading.BelowMinLevPos();
         }
+        //} 5
     }
 
     function getUpdateOpenLimitOrderRevert(
@@ -189,6 +207,10 @@ library TradingLib {
         IOstiumTradingStorage.LimitOrder orderType,
         uint256 triggerTimeout
     ) public view returns (bool) {
+        //@note
+        //Intention
+        //  triggerBlock == 0 || within `triggerTimeout` since `last triggerBlock`
+
         uint256 triggerBlock = storageT.orderTriggerBlock(trader, pairIndex, index, orderType);
 
         if (triggerBlock == 0 || (triggerBlock > 0 && ChainUtils.getBlockNumber() - triggerBlock >= triggerTimeout)) {

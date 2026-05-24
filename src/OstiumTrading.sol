@@ -294,18 +294,18 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
         //Intention
         //  1) Guard:
         //      notDone
-        //      revert if closePercentage > PERCENT_BASE
-        //      revert if marketPrice == 0 || slippageP == 0 || slippageP > PERCENT_BASE
-        //  2) Normalize: closePercentage == 0 -> default to PERCENT_BASE (full close)
-        //  3) Fetch open trade and tradeInfo for sender
-        //  4) Validate via getCloseTradeRevert (trade exists, no pending triggers, not already being closed, remaining collateral >= minLevPos)
-        //  5) Request oracle price for MARKET_CLOSE
-        //  6) Pull oracleFee from sender -> tradingStorage; handle distribution
-        //  7) Store pending market close order with close percentage
+        //      0% < closePercentage <= 100%
+        //          If closePercentage == 0 -> default to 100% (full close)
+        //      0% < slippageP < 100%
+        //  2) Validate close order via getCloseTradeRevert
+        //  3) Request oracle price
+        //  4) Pull oracleFee from sender
+        //  5) Store pending market close order as MARKET_CLOSE
 
         IOstiumTradingStorage storageT = IOstiumTradingStorage(registry.getContractAddress("tradingStorage"));
         IOstiumPairsStorage pairsStorage = IOstiumPairsStorage(registry.getContractAddress("pairsStorage"));
 
+        //-1 {
         address sender = _msgSender();
 
         if (closePercentage > PERCENT_BASE) {
@@ -319,21 +319,27 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
         if (closePercentage == 0) {
             closePercentage = PERCENT_BASE;
         }
+        //} 1
 
         IOstiumTradingStorage.Trade memory t = storageT.getOpenTrade(sender, pairIndex, index);
         IOstiumTradingStorage.TradeInfo memory i = storageT.getOpenTradeInfo(sender, pairIndex, index);
 
+        //2
         TradingLib.getCloseTradeRevert(storageT, pairsStorage, sender, t, i, triggerTimeout, closePercentage);
 
+        //3
         uint256 orderId = IOstiumPriceRouter(registry.getContractAddress("priceRouter"))
             .getPrice(pairIndex, IOstiumPriceUpKeep.OrderType.MARKET_CLOSE, block.timestamp);
 
+        //4 {
         // Always charge oracle fee for both partial and full closes to prevent griefing
         uint256 oracleFee = pairsStorage.pairOracleFee(pairIndex);
         storageT.transferUsdc(sender, address(storageT), oracleFee);
         storageT.handleOracleFee(oracleFee);
         emit OracleFeeCharged(orderId, sender, pairIndex, oracleFee);
+        //} 4
 
+        //5
         storageT.storePendingMarketOrder(
             IOstiumTradingStorage.PendingMarketOrderV2(
                 0,
@@ -486,7 +492,9 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
         uint8 maxSL_P = IOstiumTradingCallbacks(registry.getContractAddress("callbacks")).maxSl_P();
         uint256 maxSlDist = (t.openPrice * maxSL_P) / t.leverage;
 
-        if (newSl != 0 && (t.buy ? newSl < t.openPrice - maxSlDist : newSl > t.openPrice + maxSlDist)) revert WrongSL();
+        if (newSl != 0 && (t.buy ? newSl < t.openPrice - maxSlDist : newSl > t.openPrice + maxSlDist)) {
+            revert WrongSL();
+        }
 
         storageT.updateSl(sender, pairIndex, index, newSl);
 
@@ -631,22 +639,28 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
         //      onlyTradesUpKeep
         //      notDone
         //      pairIndexListed
-        //  2) If orderType == OPEN:
-        //         return NO_LIMIT if limit order not found
-        //         guard isNotPaused
-        //         return BACKDATED_EXECUTION if priceTimestamp < order.createdAt
-        //     Else (close types: TP/SL/LIQ/etc.):
-        //         fetch trade; return NO_TRADE if leverage == 0
-        //         return BACKDATED_EXECUTION if priceTimestamp < tradeInfo.createdAt
-        //         return NO_SL if SL type but sl == 0 or sl updated after priceTimestamp
-        //         return NO_TP if TP type but tp == 0 or tp updated after priceTimestamp
-        //  3) Return PENDING_TRIGGER if trigger already active within timeout
+        //  2)
+        //     2.1) If orderType == OPEN:
+        //              hasOpenLimitOrder()
+        //              isNotPaused()
+        //              valid timestamp: priceTimestamp >= order.createdAt
+        //     2.2) Else (close types: TP/SL/LIQ/...):
+        //              hasOpenLimitOrder(): leverage == 0
+        //              valid timestamp: priceTimestamp >= tradeInfo.createdAt
+        //              if SL type but sl == 0 || sl updated after priceTimestamp -> early stop
+        //              if TP type but tp == 0 or tp updated after priceTimestamp -> early stop
+        //  3) If have same orderType pending trigger -> early stop
         //  4) Request oracle price (LIMIT_OPEN or LIMIT_CLOSE)
-        //  5) Store pending automation order; set trigger; return SUCCESS
+        //  5) Store pending automation order; set trigger block
+        //Assumption
+        //  5) automation order can be expired (priceTimestamp + triggerTimeout)
+
         IOstiumTradingStorage storageT = IOstiumTradingStorage(registry.getContractAddress("tradingStorage"));
 
         IOstiumTradingStorage.Trade memory t;
 
+        //2 {
+        //2.1 {
         if (orderType == IOstiumTradingStorage.LimitOrder.OPEN) {
             if (!storageT.hasOpenLimitOrder(trader, pairIndex, index)) {
                 return IOstiumTrading.AutomationOrderStatus.NO_LIMIT;
@@ -657,7 +671,10 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
             if (priceTimestamp < openOrder.createdAt) {
                 return IOstiumTrading.AutomationOrderStatus.BACKDATED_EXECUTION;
             }
-        } else {
+        }
+        //} 2.1
+        //2.2 {
+        else {
             t = storageT.getOpenTrade(trader, pairIndex, index);
             IOstiumTradingStorage.TradeInfo memory tInfo = storageT.getOpenTradeInfo(trader, pairIndex, index);
 
@@ -682,11 +699,16 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
                 return IOstiumTrading.AutomationOrderStatus.NO_TP;
             }
         }
+        //} 2.2
+        //} 2
 
+        //3 {
         if (!TradingLib.checkNoPendingTrigger(storageT, trader, pairIndex, index, orderType, triggerTimeout)) {
             return IOstiumTrading.AutomationOrderStatus.PENDING_TRIGGER;
         }
+        //} 3
 
+        //4 {
         uint256 orderId = IOstiumPriceRouter(registry.getContractAddress("priceRouter"))
             .getPrice(
                 pairIndex,
@@ -699,6 +721,7 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
             IOstiumTradingStorage.PendingAutomationOrder(trader, pairIndex, index, orderType), orderId
         );
         storageT.setTrigger(trader, pairIndex, index, orderType);
+        //} 4
 
         if (orderType == IOstiumTradingStorage.LimitOrder.OPEN) {
             emit AutomationOpenOrderInitiated(orderId, trader, pairIndex, index);
