@@ -429,27 +429,35 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
         //Intention
         //  1) Guard:
         //      notDone
-        //      revert if TP trigger pending within triggerTimeout
-        //  2) Fetch open trade; revert if leverage == 0 (no trade)
-        //  3) Compute maxTpDist = openPrice * MAX_GAIN_P / max(initialLeverage, currentLeverage)
-        //  4) Guard: revert if newTp != 0 && TP wrong direction or beyond maxTpDist
-        //  5) Persist new TP
+        //      noPendingTrigger for TP within triggerTimeout
+        //  2) Existing trade (leverage != 0)
+        //  3) Ensure don't exceed tp max (900%)
+        //  4) updateTp
+        //Follow-up
+        //  3) maxTpDist < t.openPrice ? t.openPrice - maxTpDist : 0? When 0?
+
         address sender = _msgSender();
         IOstiumTradingStorage storageT = IOstiumTradingStorage(registry.getContractAddress("tradingStorage"));
 
+        //-1 {
         if (!TradingLib.checkNoPendingTrigger(
                 storageT, sender, pairIndex, index, IOstiumTradingStorage.LimitOrder.TP, triggerTimeout
             )) {
             revert TriggerPending(sender, pairIndex, index);
         }
+        //} 1
 
         IOstiumTradingStorage.Trade memory t = storageT.getOpenTrade(sender, pairIndex, index);
 
+        //2 {
         if (t.leverage == 0) {
             revert NoTradeFound(sender, pairIndex, index);
         }
+        //} 2
 
         (,, uint32 initialLeverage,,,,) = storageT.openTradesInfo(sender, pairIndex, index);
+
+        //3 {
         uint256 maxTpDist = (t.openPrice * MAX_GAIN_P) / (initialLeverage > t.leverage ? initialLeverage : t.leverage);
 
         if (
@@ -458,7 +466,9 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
                         ? newTp > t.openPrice + maxTpDist
                         : newTp < (maxTpDist < t.openPrice ? t.openPrice - maxTpDist : 0))
         ) revert WrongTP();
+        //} 3
 
+        //4
         storageT.updateTp(sender, pairIndex, index, newTp);
 
         emit TpUpdated(storageT.getOpenTradeInfo(sender, pairIndex, index).tradeId, sender, pairIndex, index, newTp);
@@ -469,33 +479,41 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
         //Intention
         //  1) Guard:
         //      notDone
-        //      revert if SL trigger pending within triggerTimeout
-        //  2) Fetch open trade; revert if leverage == 0 (no trade)
-        //  3) Compute maxSlDist = openPrice * maxSL_P / leverage (maxSL_P fetched from callbacks)
-        //  4) Guard: revert if newSl != 0 && SL wrong direction or beyond maxSlDist
-        //  5) Persist new SL
+        //      noPendingTrigger for SL within triggerTimeout
+        //  2) Existing trade (leverage != 0)
+        //  3) Ensure new SL is within max SL distance
+        //  4) Persist new SL
+
         IOstiumTradingStorage storageT = IOstiumTradingStorage(registry.getContractAddress("tradingStorage"));
 
         address sender = _msgSender();
+
+        //-1 {
         if (!TradingLib.checkNoPendingTrigger(
                 storageT, sender, pairIndex, index, IOstiumTradingStorage.LimitOrder.SL, triggerTimeout
             )) {
             revert TriggerPending(sender, pairIndex, index);
         }
+        //} 1
 
         IOstiumTradingStorage.Trade memory t = storageT.getOpenTrade(sender, pairIndex, index);
 
+        //2 {
         if (t.leverage == 0) {
             revert NoTradeFound(sender, pairIndex, index);
         }
+        //} 2
 
+        //3 {
         uint8 maxSL_P = IOstiumTradingCallbacks(registry.getContractAddress("callbacks")).maxSl_P();
         uint256 maxSlDist = (t.openPrice * maxSL_P) / t.leverage;
 
         if (newSl != 0 && (t.buy ? newSl < t.openPrice - maxSlDist : newSl > t.openPrice + maxSlDist)) {
             revert WrongSL();
         }
+        //} 3
 
+        //4
         storageT.updateSl(sender, pairIndex, index, newSl);
 
         emit SlUpdated(storageT.getOpenTradeInfo(sender, pairIndex, index).tradeId, sender, pairIndex, index, newSl);
