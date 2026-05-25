@@ -797,10 +797,29 @@ contract OstiumTradingCallbacks is IOstiumTradingCallbacks, Initializable {
     }
 
     function handleRemoveCollateral(IOstiumPriceUpKeep.PriceUpKeepAnswer calldata a) external notDone {
+        //@note
+        //Intention
+        //  1) Guard:
+        //      notDone
+        //      onlyPriceUpKeep
+        //  2)
+        //     If trade.leverage == 0                           -> CancelReason.NO_TRADE
+        //     Else if a.price <= 0 || a.bid <= 0 || a.ask <= 0 -> CancelReason.MARKET_CLOSED
+        //     Else if trade.collateral <= request.removeAmount -> CancelReason.NOT_HIT
+        //     Else -> calculate newLeverage, newCollateral and validate:
+        //          2.1) If day trade closed with new leverage  -> CancelReason.DAY_TRADE_NOT_ALLOWED
+        //          2.2) validate via TradingCallbacksLib.getHandleRemoveCollateralCancelReason()
+        //  5) If cancelReason == NONE -> execute remove collateral:
+        //      5.1) Adjust TP and SL for new leverage
+        //      5.2) Push USDC from storageT to trader
+        //      5.3) Update trade and group collateral
+        //  6) Cleanup pending request and trigger
+
         (IOstiumTradingStorage storageT, IOstiumPairInfos pairInfos, IOstiumPairsStorage pairsStorage) = getContracts();
 
         IOstiumTradingStorage.PendingRemoveCollateral memory request = storageT.getPendingRemoveCollateral(a.orderId);
 
+        //-1
         isPriceUpKeep(request.pairIndex);
 
         IOstiumTradingStorage.Trade memory trade =
@@ -811,6 +830,7 @@ contract OstiumTradingCallbacks is IOstiumTradingCallbacks, Initializable {
 
         CancelReason cancelReason;
 
+        //4 {
         // If trade exists and market is open, check liquidation safety
         if (trade.leverage == 0) {
             cancelReason = CancelReason.NO_TRADE;
@@ -833,7 +853,9 @@ contract OstiumTradingCallbacks is IOstiumTradingCallbacks, Initializable {
                 );
             }
         }
+        //} 4
 
+        //5 {
         if (cancelReason == CancelReason.NONE) {
             trade.tp = TradingCallbacksLib.correctTp(
                 trade.openPrice, trade.tp, trade.leverage, tradeInfo.initialLeverage, trade.buy
@@ -861,10 +883,13 @@ contract OstiumTradingCallbacks is IOstiumTradingCallbacks, Initializable {
                 a.orderId, tradeInfo.tradeId, request.trader, request.pairIndex, request.removeAmount, cancelReason
             );
         }
+        //} 5
 
+        //6 {
         storageT.unregisterPendingRemoveCollateral(a.orderId);
         storageT.unregisterTrigger(
             request.trader, request.pairIndex, request.index, IOstiumTradingStorage.LimitOrder.REMOVE_COLLATERAL
         );
+        //} 6
     }
 }

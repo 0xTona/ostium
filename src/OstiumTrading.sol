@@ -524,17 +524,25 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
         //Intention
         //  1) Guard:
         //      notDone
-        //      revert if no trade, topUpAmount == 0, or any trigger pending
-        //  2) Compute newLeverage from (collateral + topUpAmount); if not exact -> round up newLeverage, recalculate newCollateral to preserve integer leverage
-        //  3) Guard: revert if group exposure exceeded, newCollateral > maxAllowedCollateral, or newLeverage >= current or < pairMinLeverage
-        //  4) Pull topUpAmount from sender -> tradingStorage
-        //  5) Update trade state (collateral, leverage) and increment group collateral
+        //      onlyExistingTrade (leverage != 0)
+        //      topUpAmount > 0
+        //      noPendingTrigger for TP, SL, LIQ, CLOSE_DAY_TRADE, REMOVE_COLLATERAL  within triggerTimeout
+        //  2) Compute newLeverage from (collateral + topUpAmount)
+        //  3) validate top up
+        //      don't exceed max allowed collateral
+        //      newCollateral < maxAllowedCollateral
+        //      pairMinLeverage <= newLeverage < t.leverage
+        //  4) Update states
+        //Follow-up
+        //  2) tradeSize is rounded up?
+
         address sender = _msgSender();
         IOstiumTradingStorage storageT = IOstiumTradingStorage(registry.getContractAddress("tradingStorage"));
         IOstiumPairsStorage pairsStorage = IOstiumPairsStorage(registry.getContractAddress("pairsStorage"));
 
         IOstiumTradingStorage.Trade memory t = storageT.getOpenTrade(sender, pairIndex, index);
 
+        //-1 {
         if (t.leverage == 0) {
             revert NoTradeFound(sender, pairIndex, index);
         }
@@ -544,6 +552,9 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
         if (!TradingLib.checkNoPendingTriggers(storageT, t.trader, t.pairIndex, t.index, triggerTimeout)) {
             revert TriggerPending(t.trader, t.pairIndex, t.index);
         }
+        //} 1
+
+        //2 {
         uint256 tradeSize = t.collateral.mulDiv(t.leverage, 100, Math.Rounding.Ceil);
         uint256 newCollateral = t.collateral + topUpAmount;
         uint32 newLeverage = ((tradeSize * PRECISION_6) / newCollateral / 1e4).toUint32();
@@ -558,16 +569,23 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
                 revert WrongParams();
             }
         }
+        //} 2
+
+        //3 {
         if (pairsStorage.groupCollateral(pairIndex, t.buy) + topUpAmount > pairsStorage.groupMaxCollateral(pairIndex)) {
             revert ExposureLimits();
         }
+
         if (newCollateral > maxAllowedCollateral) {
             revert AboveMaxAllowedCollateral();
         }
+
         if (newLeverage >= t.leverage || newLeverage < pairsStorage.pairMinLeverage(t.pairIndex)) {
             revert WrongLeverage(newLeverage);
         }
+        //} 3
 
+        //4 {
         t.leverage = newLeverage;
         t.collateral = newCollateral;
 
@@ -575,6 +593,7 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
 
         storageT.updateTrade(t);
         pairsStorage.updateGroupCollateral(t.pairIndex, topUpAmount, t.buy, true);
+        //} 4
 
         emit TopUpCollateralExecuted(
             storageT.getOpenTradeInfo(sender, pairIndex, index).tradeId, sender, pairIndex, topUpAmount, t.leverage
@@ -586,13 +605,16 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
         //Intention
         //  1) Guard:
         //      notDone
-        //      revert if no trade, removeAmount == 0 or >= collateral, or any trigger pending
-        //  2) Compute newLeverage from (collateral - removeAmount); if not exact -> round up newLeverage, recalculate removeAmount to preserve integer leverage
-        //  3) Guard: revert if newLeverage <= current leverage or > pairMaxLeverage
-        //  4) Request oracle price for REMOVE_COLLATERAL
-        //  5) Store pending remove collateral order; set trigger
-        //  6) Pull oracleFee from sender -> tradingStorage; handle distribution
+        //      onlyExistingTrade (leverage != 0)
+        //      0 < removeAmount <= current collateral
+        //       noPendingTrigger for TP, SL, LIQ, CLOSE_DAY_TRADE, REMOVE_COLLATERAL  within triggerTimeout
+        //  2) Calculate new leverage, collateral
+        //  4) t.leverage < newLeverage <= pairMaxLeverage
+        //  5) Request price from router
+        //  6) Store pending remove collateral order and trigger
+        //  7) Pull and handle oracle fee in USDC
 
+        //1 {
         address sender = _msgSender();
         IOstiumTradingStorage storageT = IOstiumTradingStorage(registry.getContractAddress("tradingStorage"));
         IOstiumPairsStorage pairsStorage = IOstiumPairsStorage(registry.getContractAddress("pairsStorage"));
@@ -608,6 +630,9 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
         if (!TradingLib.checkNoPendingTriggers(storageT, t.trader, t.pairIndex, t.index, triggerTimeout)) {
             revert TriggerPending(t.trader, t.pairIndex, t.index);
         }
+        //} 1
+
+        //2 {
         uint256 tradeSize = t.collateral.mulDiv(t.leverage, 100, Math.Rounding.Ceil);
         uint256 newCollateral = t.collateral - removeAmount;
         uint32 newLeverage = ((tradeSize * PRECISION_6) / newCollateral / 1e4).toUint32();
@@ -621,23 +646,32 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
                 revert WrongParams();
             }
         }
+        //} 2
 
+        //3 {
         if (newLeverage <= t.leverage || newLeverage > pairsStorage.pairMaxLeverage(t.pairIndex)) {
             revert WrongLeverage(newLeverage);
         }
+        //} 3
 
+        //4 {
         uint256 orderId = IOstiumPriceRouter(registry.getContractAddress("priceRouter"))
             .getPrice(pairIndex, IOstiumPriceUpKeep.OrderType.REMOVE_COLLATERAL, block.timestamp);
+        //} 4
 
+        //5 {
         storageT.storePendingRemoveCollateral(
             IOstiumTradingStorage.PendingRemoveCollateral(removeAmount, sender, pairIndex, index), orderId
         );
 
         storageT.setTrigger(t.trader, pairIndex, index, IOstiumTradingStorage.LimitOrder.REMOVE_COLLATERAL);
+        //} 5
 
+        //6 {
         uint256 oracleFee = pairsStorage.pairOracleFee(pairIndex);
         storageT.transferUsdc(sender, address(storageT), oracleFee);
         storageT.handleOracleFee(oracleFee);
+        //} 6
 
         emit RemoveCollateralInitiated(
             storageT.getOpenTradeInfo(sender, pairIndex, index).tradeId, orderId, sender, pairIndex, removeAmount

@@ -96,6 +96,16 @@ library TradingCallbacksLib {
         pure
         returns (uint192)
     {
+        //@note
+        //Intention
+        //  If tp == 0 || p == maxPnlP:
+        //      tpDiff = (openPrice * |maxPnlP|) / leverage
+        //          tpDiff is the distance between openPrice and price that trader win maxPnlP
+        //      If buy -> return openPrice + tpDiff
+        //      Else   -> return max(openPrice - tpDiff, 0)
+        //Audit
+        //  Bypass if  p != maxPnlP?
+
         (int256 p, int256 maxPnlP) =
             _currentPercentProfit(openPrice.toInt256(), tp.toInt256(), buy, int32(leverage), int32(initialLeverage));
 
@@ -128,9 +138,13 @@ library TradingCallbacksLib {
         bool buy,
         uint8 maxSl_P
     ) external pure returns (uint192) {
-        (int256 p,) = _currentPercentProfit(
-            openPrice.toInt256(), sl.toInt256(), buy, int32(leverage), int32(initialLeverage)
-        );
+        //@note
+        //Audit
+        //  N) Unsafe cast int8(maxSl_P)
+        //      -> max 100 is 1100100b
+
+        (int256 p,) =
+            _currentPercentProfit(openPrice.toInt256(), sl.toInt256(), buy, int32(leverage), int32(initialLeverage));
         if (sl > 0 && p < int8(maxSl_P) * int32(PRECISION_6) * -1) {
             return 0;
         }
@@ -338,9 +352,15 @@ library TradingCallbacksLib {
         IOstiumPairsStorage pairsStorage,
         uint32 initialLeverage
     ) external returns (IOstiumTradingCallbacks.CancelReason) {
-        TradingCallbacksLib.PriceImpactResult memory result = getDynamicTradePriceImpact(
-            a.price, a.ask, a.bid, false, trade, pairInfos, trade.collateral
-        );
+        //@note
+        //Intention
+        //  1) tradeValue < liqMarginValue -> UNDER_LIQUIDATION
+        //  2) leverage > maxLeverage      -> MAX_LEVERAGE
+        //  3) profitP == maxPnlP          -> GAIN_LOSS
+        //  4) NONE of the above           -> NONE
+
+        TradingCallbacksLib.PriceImpactResult memory result =
+            getDynamicTradePriceImpact(a.price, a.ask, a.bid, false, trade, pairInfos, trade.collateral);
 
         (int256 profitP, int256 maxPnlP) = currentPercentProfit(
             trade.openPrice.toInt256(),
@@ -365,17 +385,23 @@ library TradingCallbacksLib {
         bool isLiquidated = tradeValue < liqMarginValue;
         uint256 usdcSentToTrader = isLiquidated ? 0 : tradeValue;
 
+        //1 {
         if (usdcSentToTrader == 0) {
             return IOstiumTradingCallbacks.CancelReason.UNDER_LIQUIDATION;
         }
+        //} 1
 
+        //2 {
         if (trade.leverage > maxLeverage) {
             return IOstiumTradingCallbacks.CancelReason.MAX_LEVERAGE;
         }
+        //} 2
 
+        //3 {
         if (profitP == maxPnlP) {
             return IOstiumTradingCallbacks.CancelReason.GAIN_LOSS;
         }
+        //} 3
 
         return IOstiumTradingCallbacks.CancelReason.NONE;
     }
