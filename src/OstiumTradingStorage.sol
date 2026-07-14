@@ -243,14 +243,10 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
             //3.3
             updateOpenInterest(_trade.pairIndex, _tradeInfo.oiNotional, true, _trade.buy);
         }
-<<<<<<< HEAD
-        //} 3
-=======
 
         openTradesInfo[_trade.trader][_trade.pairIndex][_trade.index] = _tradeInfo;
 
         updateOpenInterest(_trade.pairIndex, _tradeInfo.oiNotional, true, _trade.buy);
->>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
     }
 
     function unregisterTrade(address _trader, uint16 _pairIndex, uint8 _index, uint256 _collateralToClose)
@@ -571,11 +567,7 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
 
         int256 oiDelta = oiLong.toInt256() - oiShort.toInt256();
 
-<<<<<<< HEAD
         (devFee, vaultFee) = IOstiumPairInfos(registry.getContractAddress("pairInfos"))
-=======
-        (devFee, vaultFee) = IOstiumPairInfos(registry.getContractAddress('pairInfos'))
->>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
             .getOpeningFee(
                 _pairIndex,
                 isBuy ? _leveragedPositionSize.toInt256() : -_leveragedPositionSize.toInt256(),

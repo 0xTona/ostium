@@ -31,12 +31,8 @@ interface IOstiumTradingStorage {
         uint32 leverage; // PRECISION_2
         uint16 pairIndex;
         uint8 index;
-<<<<<<< HEAD
-        bool buy; // true = long, false = short
-=======
         bool buy;
         bool isDayTrade;
->>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
     }
 
     struct BuilderFee {
@@ -128,52 +124,9 @@ interface IOstiumTradingStorage {
 
     function maxPendingMarketOrders() external view returns (uint8);
 
-    function openTrades(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index
-    )
+    function openTrades(address _trader, uint16 _pairIndex, uint8 _index)
         external
         view
-<<<<<<< HEAD
-        returns (
-            uint256,
-            uint192,
-            uint192,
-            uint192,
-            address,
-            uint32,
-            uint16,
-            uint8,
-            bool
-        );
-
-    function openTradesInfo(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index
-    )
-        external
-        view
-        returns (uint256, uint256, uint32, uint32, uint32, uint32, bool);
-
-    function openTradesCount(
-        address _trader,
-        uint16 _pairIndex
-    ) external view returns (uint32);
-
-    function openLimitOrderIds(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index
-    ) external view returns (uint256);
-
-    function openLimitOrdersCount(
-        address _trader,
-        uint16 _pairIndex
-    ) external view returns (uint8);
-
-=======
         returns (uint256, uint192, uint192, uint192, address, uint32, uint16, uint8, bool, bool);
     function openTradesInfo(address _trader, uint16 _pairIndex, uint8 _index)
         external
@@ -184,7 +137,6 @@ interface IOstiumTradingStorage {
     function openLimitOrderIds(address _trader, uint16 _pairIndex, uint8 _index) external view returns (uint256);
     function limitOrderIds(address, uint16, uint8) external view returns (uint256);
     function openLimitOrdersCount(address _trader, uint16 _pairIndex) external view returns (uint8);
->>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
     function orderTriggerBlock(
         address _trader,
         uint16 _pairIndex,
@@ -192,10 +144,7 @@ interface IOstiumTradingStorage {
         IOstiumTradingStorage.LimitOrder orderType
     ) external view returns (uint256);
 
-    function pairLimitOrders(
-        uint16 pairIndex,
-        uint256 index
-    )
+    function pairLimitOrders(uint16 pairIndex, uint256 index)
         external
         view
         returns (
@@ -213,114 +162,6 @@ interface IOstiumTradingStorage {
             bool, // buy
             bool // isDayTrade
         );
-<<<<<<< HEAD
-
-    function reqID_pendingMarketOrder(
-        uint256 _orderId
-    ) external view returns (uint256, uint192, uint32, Trade memory, uint16);
-
-    function reqID_pendingAutomationOrder(
-        uint256
-    ) external view returns (address, uint16, uint8, LimitOrder);
-
-    function pendingOrderIdsCount(
-        address _trader
-    ) external view returns (uint256);
-
-    function pendingMarketOpenCount(
-        address _trader,
-        uint16 _pairIndex
-    ) external view returns (uint8);
-
-    function pendingMarketCloseCount(
-        address _trader,
-        uint16 _pairIndex
-    ) external view returns (uint8);
-
-    function pairTraders(
-        uint16 _pairIndex,
-        uint256 index
-    ) external view returns (address);
-
-    function pairTradersCount(
-        uint16 _pairIndex
-    ) external view returns (uint256);
-
-    function pairTradersId(
-        address _trader,
-        uint16 _pairIndex
-    ) external view returns (uint256);
-
-    function openInterest(
-        uint16 _pairIndex,
-        uint256 _type
-    ) external view returns (uint256);
-
-    function hasOpenLimitOrder(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index
-    ) external view returns (bool);
-
-    function getOpenTrade(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index
-    ) external view returns (Trade memory);
-
-    function getOpenTradeInfo(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index
-    ) external view returns (TradeInfo memory);
-
-    function firstEmptyTradeIndex(
-        address _trader,
-        uint16 _pairIndex
-    ) external view returns (uint8);
-
-    function firstEmptyOpenLimitIndex(
-        address _trader,
-        uint16 _pairIndex
-    ) external view returns (uint8);
-
-    function getPendingOrderIds(
-        address
-    ) external view returns (uint256[] memory);
-
-    function pairTradersArray(
-        uint16 _pairIndex
-    ) external view returns (address[] memory);
-
-    function getOpenLimitOrder(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index
-    ) external view returns (OpenLimitOrder memory);
-
-    function getOpenLimitOrderByIndex(
-        uint16 _pairIndex,
-        uint256 _index
-    ) external view returns (OpenLimitOrder memory);
-
-    function getOpenLimitOrders(
-        uint16 _pairIndex
-    ) external view returns (OpenLimitOrder[] memory);
-
-    function totalOpenLimitOrders(
-        uint16 pairIndex
-    ) external view returns (uint256);
-
-    function getPairOpeningInterestInfo(
-        uint16 _pairIndex
-    ) external view returns (uint256, uint256, uint256);
-
-    function getBuilderData(
-        address _trader,
-        uint16 _pairIndex,
-        uint256 _index
-    ) external view returns (BuilderFee memory);
-=======
     function reqID_pendingMarketOrder(uint256 _orderId)
         external
         view
@@ -352,7 +193,6 @@ interface IOstiumTradingStorage {
         external
         view
         returns (BuilderFee memory);
->>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
 
     function maxOIKeeper() external view returns (address);
     function setMaxOIKeeper(address _keeper) external;
@@ -362,32 +202,16 @@ interface IOstiumTradingStorage {
 
     function setMaxTradesPerPair(uint256 _maxTradesPerPair) external;
 
-    function setMaxPendingMarketOrders(
-        uint256 _maxPendingMarketOrders
-    ) external;
+    function setMaxPendingMarketOrders(uint256 _maxPendingMarketOrders) external;
 
-    function setMaxOpenInterest(
-        uint16 _pairIndex,
-        uint256 _newMaxOpenInterest
-    ) external;
+    function setMaxOpenInterest(uint16 _pairIndex, uint256 _newMaxOpenInterest) external;
 
-    function setMaxOpenInterestArray(
-        uint16[] calldata _pairIndex,
-        uint256[] calldata _newMaxOpenInterest
-    ) external;
+    function setMaxOpenInterestArray(uint16[] calldata _pairIndex, uint256[] calldata _newMaxOpenInterest) external;
 
     // onlyTrading
-    function storeTrade(
-        Trade memory _trade,
-        TradeInfo memory _tradeInfo
-    ) external;
+    function storeTrade(Trade memory _trade, TradeInfo memory _tradeInfo) external;
 
-    function unregisterTrade(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index,
-        uint256 _collateralToClose
-    ) external;
+    function unregisterTrade(address _trader, uint16 _pairIndex, uint8 _index, uint256 _collateralToClose) external;
 
     function storePendingMarketOrder(
         PendingMarketOrderV2 calldata _order,
@@ -396,58 +220,22 @@ interface IOstiumTradingStorage {
         BuilderFee calldata bf
     ) external;
 
-    function storeOpenLimitOrder(
-        OpenLimitOrder calldata,
-        BuilderFee calldata bf
-    ) external;
+    function storeOpenLimitOrder(OpenLimitOrder calldata, BuilderFee calldata bf) external;
 
     function updateOpenLimitOrder(OpenLimitOrder calldata) external;
-<<<<<<< HEAD
-
-    function setTrigger(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index,
-        IOstiumTradingStorage.LimitOrder _orderType
-    ) external;
-
-    function storePendingAutomationOrder(
-        PendingAutomationOrder calldata _automationOrder,
-        uint256 _orderId
-    ) external;
-
-    function updateSl(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index,
-        uint256 _newSl
-    ) external;
-
-    function updateTp(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index,
-        uint256 _newTp
-    ) external;
-=======
     function setTrigger(address _trader, uint16 _pairIndex, uint8 _index, IOstiumTradingStorage.LimitOrder _orderType)
         external;
     function storePendingAutomationOrder(PendingAutomationOrder calldata _automationOrder, uint256 _orderId) external;
     function storePendingMarketCloseTradeId(uint256 orderId, uint256 tradeId) external;
     function updateSl(address _trader, uint16 _pairIndex, uint8 _index, uint256 _newSl) external;
     function updateTp(address _trader, uint16 _pairIndex, uint8 _index, uint256 _newTp) external;
->>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
 
     //only trading or callbacks
     function updateTrade(Trade calldata) external;
 
     function unregisterPendingMarketOrder(uint256 _id, bool _open) external;
 
-    function unregisterOpenLimitOrder(
-        address _trader,
-        uint16 _pairIndex,
-        uint8 _index
-    ) external;
+    function unregisterOpenLimitOrder(address _trader, uint16 _pairIndex, uint8 _index) external;
 
     function transferUsdc(address _from, address _to, uint256 _amount) external;
 
@@ -476,14 +264,9 @@ interface IOstiumTradingStorage {
 
     function refundOracleFee(uint256 _amount) external;
 
-    function storePendingRemoveCollateral(
-        PendingRemoveCollateral calldata request,
-        uint256 orderId
-    ) external;
+    function storePendingRemoveCollateral(PendingRemoveCollateral calldata request, uint256 orderId) external;
 
-    function getPendingRemoveCollateral(
-        uint256 orderId
-    ) external view returns (PendingRemoveCollateral memory);
+    function getPendingRemoveCollateral(uint256 orderId) external view returns (PendingRemoveCollateral memory);
 
     function unregisterPendingRemoveCollateral(uint256 orderId) external;
 }
