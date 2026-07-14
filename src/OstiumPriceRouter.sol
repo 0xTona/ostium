@@ -72,6 +72,7 @@ contract OstiumPriceRouter is IOstiumPriceRouter, Initializable {
         emit MaxTsValidityUpdated(value);
     }
 
+<<<<<<< HEAD
     function getPrice(
         uint16 pairIndex,
         IOstiumPriceUpKeep.OrderType orderType,
@@ -82,6 +83,14 @@ contract OstiumPriceRouter is IOstiumPriceRouter, Initializable {
         //  Each pair oracle
 
         if (block.timestamp - timestamp > maxTsValidity) {
+=======
+    function getPrice(uint16 pairIndex, IOstiumPriceUpKeep.OrderType orderType, uint256 timestamp)
+        external
+        onlyTrading
+        returns (uint256)
+    {
+        if (timestamp > block.timestamp || (block.timestamp - timestamp > maxTsValidity)) {
+>>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
             revert WrongTimestamp();
         }
 
@@ -90,12 +99,17 @@ contract OstiumPriceRouter is IOstiumPriceRouter, Initializable {
             registry.getContractAddress("pairsStorage")
         ).oracle(pairIndex);
         IOstiumPriceUpKeep(
+<<<<<<< HEAD
             payable(
                 registry.getContractAddress(
                     bytes32(abi.encodePacked(priceUpkeepType, "PriceUpkeep"))
                 )
             )
         ).getPrice(currentOrderId, pairIndex, orderType, timestamp);
+=======
+                payable(registry.getContractAddress(bytes32(abi.encodePacked(priceUpkeepType, 'PriceUpkeep'))))
+            ).getPrice(currentOrderId, pairIndex, orderType, timestamp);
+>>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
 
         return currentOrderId;
     }

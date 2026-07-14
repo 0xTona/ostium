@@ -2,6 +2,7 @@
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
+<<<<<<< HEAD
 import "src/interfaces/IOstiumTrading.sol";
 import "src/interfaces/IOstiumRegistry.sol";
 import "src/interfaces/IOstiumPairInfos.sol";
@@ -11,6 +12,18 @@ import "src/interfaces/IOstiumPairsStorage.sol";
 import "src/interfaces/IOstiumTradesUpKeep.sol";
 import "src/interfaces/IOstiumTradingStorage.sol";
 import "src/interfaces/IOstiumAutomationCompatible.sol";
+=======
+import 'src/interfaces/IOstiumTrading.sol';
+import 'src/interfaces/IOstiumRegistry.sol';
+import 'src/interfaces/IOstiumPairInfos.sol';
+import 'src/interfaces/IOstiumForwarded.sol';
+import 'src/interfaces/IOstiumTradingCallbacks.sol';
+import 'src/interfaces/IOstiumPairsStorage.sol';
+import 'src/interfaces/IOstiumTradesUpKeep.sol';
+import 'src/interfaces/IOstiumTradingStorage.sol';
+import 'src/interfaces/IOstiumAutomationCompatible.sol';
+import 'src/interfaces/IOwnable.sol';
+>>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
 
 pragma solidity ^0.8.24;
 
@@ -28,6 +41,17 @@ contract OstiumTradesUpKeep is IOstiumTradesUpKeep, IOstiumAutomationCompatible,
 
     function _onlyGov(address a) private view {
         if (a != registry.gov()) revert NotGov(a);
+    }
+
+    modifier onlyTimelock() {
+        _onlyTimelock();
+        _;
+    }
+
+    function _onlyTimelock() private view {
+        if (msg.sender != IOwnable(address(registry)).owner()) {
+            revert NotTimelock(msg.sender);
+        }
     }
 
     constructor() {
@@ -59,13 +83,13 @@ contract OstiumTradesUpKeep is IOstiumTradesUpKeep, IOstiumAutomationCompatible,
         }
     }
 
-    function registerForwarder(address forwarderAddress) public onlyGov {
+    function registerForwarder(address forwarderAddress) public onlyTimelock {
         if (isForwarder[forwarderAddress]) revert AlreadyForwarder(forwarderAddress);
         isForwarder[forwarderAddress] = true;
         emit ForwarderAdded(forwarderAddress);
     }
 
-    function registerForwarders(address[] calldata forwarderAddresses) external onlyGov {
+    function registerForwarders(address[] calldata forwarderAddresses) external onlyTimelock {
         for (uint256 i = 0; i < forwarderAddresses.length; i++) {
             registerForwarder(forwarderAddresses[i]);
         }
@@ -83,3 +107,4 @@ contract OstiumTradesUpKeep is IOstiumTradesUpKeep, IOstiumAutomationCompatible,
         }
     }
 }
+

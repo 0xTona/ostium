@@ -1,8 +1,17 @@
 // SPDX-License-Identifier: MIT
+<<<<<<< HEAD
 import "./interfaces/IOwnable.sol";
 import "./interfaces/IOstiumVault.sol";
 import "./interfaces/IOstiumOpenPnl.sol";
 import "./interfaces/IOstiumRegistry.sol";
+=======
+import './interfaces/IOwnable.sol';
+import './interfaces/IOstiumVault.sol';
+import './interfaces/IOstiumOpenPnl.sol';
+import './interfaces/IOstiumRegistry.sol';
+import './interfaces/IOstiumTradingStorage.sol';
+import './interfaces/IOstiumPairInfos.sol';
+>>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
 
 import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
@@ -12,28 +21,30 @@ pragma solidity ^0.8.24;
 contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
     using SafeCast for uint256;
 
-    int64 constant PRECISION_18 = 1e18; // 18 decimals
-    uint32 constant MAX_REQUESTS_START = 1 weeks;
-    uint32 constant MAX_REQUESTS_EVERY = 1 days;
-    uint16 constant MIN_REQUESTS = 1 hours;
-    uint8 constant MIN_REQUESTS_COUNT = 1;
-    uint8 constant MAX_REQUESTS_COUNT = 24;
+    uint64 constant PRECISION_18 = 1e18; // 18 decimals
+    uint32 constant PRECISION_6 = 1e6; // 6 decimals
+    uint8 constant PRECISION_2 = 1e2; // 2 decimals
 
     IOstiumRegistry public registry;
 
     int256 private accTotalPnl;
     int256 private accClosedPnl;
 
-    int256[] public nextEpochValues;
-    uint256 public lastRequestId;
-    uint32 public requestsStart;
-    uint32 public requestsEvery;
-    uint32 public nextEpochValuesLastRequestTs;
-    uint8 public nextEpochValuesRequestCount;
-    uint8 public requestsCount;
+    int256[] public __DEPRECATED_nextEpochValues;
+    uint256 public __DEPRECATED_lastRequestId;
+    uint32 public __DEPRECATED_requestsStart;
+    uint32 public __DEPRECATED_requestsEvery;
+    uint32 public __DEPRECATED_nextEpochValuesLastRequestTs;
+    uint8 public __DEPRECATED_nextEpochValuesRequestCount;
+    uint8 public __DEPRECATED_requestsCount;
 
     mapping(uint16 pairIndex => int256) public lastTradePrice;
     mapping(uint16 pairIndex => int256) public accNetOiUnits;
+
+    int256 private accTotalRollover; // 18 decimals
+    int256 private accClosedRollover; // 18 decimals
+
+    mapping(uint16 pairIndex => mapping(bool long => uint256)) public currentNotional; // notional -> 6 decimals
 
     constructor() {
         _disableInitializers();
@@ -44,26 +55,45 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
             revert WrongParams();
         }
         registry = _registry;
-        _updateRequestsStart(2 days);
-        _updateRequestsEvery(3 hours);
-        _updateRequestsCount(8);
+        //_updateRequestsStart(2 days);
+        //_updateRequestsEvery(3 hours);
+        //_updateRequestsCount(8);
     }
 
-    modifier onlyRegistryOwner() {
-        _onlyRegistryOwner();
-        _;
-    }
+    function initializeV2(
+        int256 openRolloverFee,
+        uint16[] calldata pairIds,
+        uint256[] calldata currentLongNotional,
+        uint256[] calldata currentShortNotional
+    ) external reinitializer(2) {
+        if (pairIds.length != currentLongNotional.length || pairIds.length != currentShortNotional.length) {
+            revert WrongParams();
+        }
 
-    function _onlyRegistryOwner() private view {
-        if (msg.sender != IOwnable(address(registry)).owner()) {
-            revert NotRegistryOwner(msg.sender);
+        accTotalRollover = openRolloverFee;
+
+        for (uint256 i; i < pairIds.length; i++) {
+            uint16 pairId = pairIds[i];
+            currentNotional[pairId][true] = currentLongNotional[i];
+            currentNotional[pairId][false] = currentShortNotional[i];
         }
     }
 
-    function updateRequestsStart(uint256 newValue) public onlyRegistryOwner {
-        _updateRequestsStart(newValue);
+    modifier onlyCallbacks() {
+        _onlyCallbacks();
+        _;
     }
 
+    function _onlyCallbacks() internal view {
+        if (msg.sender != registry.getContractAddress('callbacks')) revert NotCallbacks(msg.sender);
+    }
+
+    modifier onlyPairInfos() {
+        _onlyPairInfos();
+        _;
+    }
+
+<<<<<<< HEAD
     function _updateRequestsStart(uint256 newValue) private {
         if (newValue < MIN_REQUESTS || newValue > MAX_REQUESTS_START) {
             revert WrongParams();
@@ -131,12 +161,17 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
                 startNewEpoch();
             }
         }
+=======
+    function _onlyPairInfos() internal view {
+        if (msg.sender != registry.getContractAddress('pairInfos')) revert NotPairInfos(msg.sender);
+>>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
     }
 
     function getOpenPnl() public view returns (int256) {
         return (accTotalPnl - accClosedPnl);
     }
 
+<<<<<<< HEAD
     function makeOpenPnlRequest() private {
         ++lastRequestId;
         nextEpochValuesRequestCount++;
@@ -171,6 +206,14 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
         emit NewEpoch(newEpoch, lastRequestId, nextEpochValues, newEpochOpenPnl, finalNewEpochPositiveOpenPnl);
 
         delete nextEpochValues;
+=======
+    function getOpenRolloverFee() public view returns (int256) {
+        return (accTotalRollover - accClosedRollover);
+    }
+
+    function getOpenPnlWithRollover() public view returns (int256) {
+        return (getOpenPnl() - getOpenRolloverFee());
+>>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
     }
 
     function updateAccTotalPnl(
@@ -181,20 +224,24 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
         uint16 pairIndex,
         bool buy,
         bool open
+<<<<<<< HEAD
     ) external {
         if (msg.sender != registry.getContractAddress("callbacks")) {
             revert NotCallbacks(msg.sender);
         }
+=======
+    ) external onlyCallbacks {
+>>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
         int256 oiNotionalSigned = buy ? oiNotional.toInt256() : -oiNotional.toInt256();
 
         if (open) {
-            accTotalPnl -= oiNotionalSigned * (openPrice.toInt256() - oraclePrice) / PRECISION_18;
+            accTotalPnl -= oiNotionalSigned * (openPrice.toInt256() - oraclePrice) / int64(PRECISION_18);
         } else {
-            accTotalPnl -= oiNotionalSigned * (oraclePrice - closePrice.toInt256()) / PRECISION_18;
-            accClosedPnl -= oiNotionalSigned * (openPrice.toInt256() - closePrice.toInt256()) / PRECISION_18;
+            accTotalPnl -= oiNotionalSigned * (oraclePrice - closePrice.toInt256()) / int64(PRECISION_18);
+            accClosedPnl -= oiNotionalSigned * (openPrice.toInt256() - closePrice.toInt256()) / int64(PRECISION_18);
         }
 
-        accTotalPnl += (oraclePrice - lastTradePrice[pairIndex]) * accNetOiUnits[pairIndex] / PRECISION_18;
+        accTotalPnl += (oraclePrice - lastTradePrice[pairIndex]) * accNetOiUnits[pairIndex] / int64(PRECISION_18);
 
         lastTradePrice[pairIndex] = oraclePrice;
         emit LastTradePriceUpdated(pairIndex, oraclePrice);
@@ -205,12 +252,43 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
         emit AccTotalPnlUpdated(pairIndex, accTotalPnl, accClosedPnl, accNetOiUnits[pairIndex]);
     }
 
-    function average(int256[] memory array) private pure returns (int256) {
-        int256 sum;
-        for (uint256 i; i < array.length; i++) {
-            sum += array[i];
-        }
+    function updateAccTotalRollover(uint16 pairIndex, bool long, int256 prevAccRollover, int256 newAccRollover)
+        external
+        onlyPairInfos
+    {
+        accTotalRollover += getRolloverFee(newAccRollover - prevAccRollover, currentNotional[pairIndex][long]);
+        emit OpenRolloverUpdated(pairIndex, long, accTotalRollover, accClosedRollover, currentNotional[pairIndex][long]);
+    }
 
-        return sum / int256(array.length);
+    function updateAccClosedRollover(IOstiumTradingStorage.Trade memory t, uint16 closePercentage)
+        external
+        onlyCallbacks
+    {
+        bool long = t.buy;
+        uint16 pairIndex = t.pairIndex;
+
+        if (closePercentage == 0) {
+            uint256 notional = t.collateral * t.leverage / PRECISION_2;
+            currentNotional[pairIndex][long] += notional;
+        } else {
+            uint256 collateralToClose = t.collateral * closePercentage / 100e2;
+            uint256 notional = collateralToClose * t.leverage / PRECISION_2; // mirrors unregisterTrade to avoid currentNotional drift
+            if (notional > currentNotional[pairIndex][long]) {
+                emit CurrentNotionalUnderflow(pairIndex, long, currentNotional[pairIndex][long], notional);
+                notional = currentNotional[pairIndex][long];
+            }
+            currentNotional[pairIndex][long] -= notional;
+
+            int256 initAccRollover = IOstiumPairInfos(registry.getContractAddress('pairInfos'))
+                .getTradeInitialAccRolloverFeesPerCollateral(t.trader, t.pairIndex, t.index);
+            int256 currentAccRollover =
+                IOstiumPairInfos(registry.getContractAddress('pairInfos')).getAccRollover(t.pairIndex, t.buy);
+            accClosedRollover += getRolloverFee(currentAccRollover - initAccRollover, notional);
+        }
+        emit OpenRolloverUpdated(pairIndex, long, accTotalRollover, accClosedRollover, currentNotional[pairIndex][long]);
+    }
+
+    function getRolloverFee(int256 deltaAccRollover, uint256 notional) private pure returns (int256) {
+        return deltaAccRollover * notional.toInt256() / int32(PRECISION_6);
     }
 }

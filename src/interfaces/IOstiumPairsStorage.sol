@@ -145,8 +145,6 @@ interface IOstiumPairsStorage {
     function addFee(Fee calldata _fee) external;
 
     function updateFee(uint8 _id, Fee calldata _fee) external;
-
-    // onlyManager
     function setPairMaxLeverage(uint16 pairIndex, uint32 maxLeverage) external;
 
     function setPairMaxLeverageArray(

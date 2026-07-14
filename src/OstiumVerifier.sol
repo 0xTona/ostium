@@ -24,8 +24,13 @@ contract OstiumVerifier is IOstiumVerifier {
     }
 
     function registerAuthorizedSigner(address signerAddress) public onlyGov {
+<<<<<<< HEAD
         if (isAuthorizedSigner[signerAddress])
             revert AlreadyAuthorizedSigner(signerAddress);
+=======
+        if (signerAddress == address(0)) revert WrongParams();
+        if (isAuthorizedSigner[signerAddress]) revert AlreadyAuthorizedSigner(signerAddress);
+>>>>>>> 8390ce497f68fb128900840e0ec30683afa945d3
         isAuthorizedSigner[signerAddress] = true;
         emit AuthorizedSignerAdded(signerAddress);
     }
