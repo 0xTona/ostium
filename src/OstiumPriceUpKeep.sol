@@ -1,17 +1,17 @@
 // SPDX-License-Identifier: MIT
-import './interfaces/IPayable.sol';
-import './interfaces/IOstiumRegistry.sol';
-import './interfaces/IOstiumTradingCallbacks.sol';
-import './interfaces/IOstiumForwarded.sol';
-import './interfaces/IOstiumPriceUpKeep.sol';
+import "./interfaces/IPayable.sol";
+import "./interfaces/IOstiumRegistry.sol";
+import "./interfaces/IOstiumTradingCallbacks.sol";
+import "./interfaces/IOstiumForwarded.sol";
+import "./interfaces/IOstiumPriceUpKeep.sol";
 
-import 'src/interfaces/external/IChainlinkFeeManager.sol';
-import 'src/interfaces/external/IChainlinkVerifierProxy.sol';
+import "src/interfaces/external/IChainlinkFeeManager.sol";
+import "src/interfaces/external/IChainlinkVerifierProxy.sol";
 
-import '@openzeppelin/contracts/utils/Address.sol';
-import '@openzeppelin/contracts/utils/math/SafeCast.sol';
-import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
-import './interfaces/IOwnable.sol';
+import "@openzeppelin/contracts/utils/Address.sol";
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "./interfaces/IOwnable.sol";
 
 pragma solidity ^0.8.24;
 
@@ -74,42 +74,80 @@ contract OstiumPriceUpKeep is IOstiumPriceUpKeep, IOstiumForwarded, IPayable, In
     }
 
     function _onlyRouter() private view {
-        if (msg.sender != registry.getContractAddress('priceRouter')) {
+        if (msg.sender != registry.getContractAddress("priceRouter")) {
             revert NotRouter(msg.sender);
         }
     }
 
     function getPrice(uint256 orderId, uint16 pairIndex, OrderType orderType, uint256 timestamp) external onlyRouter {
+        //@note
+        //Intention
+        //  1) Guard:
+        //      onlyRouter
+        //      onlyUnitializedOrderId
+        //  2) Store orders[orderId]
+        //Audit
+        //  1) delete orders[orderId] after fulfill() can cause replay attack?
+        //Follow-up
+        //  2) order.timestamp = passed timestamp not block.timestamp
+
+        //-1 {
         if (orders[orderId].initiated) {
             revert AlreadyInitiated(orderId);
         }
-        bytes32 feed = IOstiumPairsStorage(registry.getContractAddress('pairsStorage')).pairFeed(pairIndex);
+        //} 1
 
+        bytes32 feed = IOstiumPairsStorage(registry.getContractAddress("pairsStorage")).pairFeed(pairIndex);
+
+        //2
         orders[orderId] = Order(timestamp.toUint32(), pairIndex, orderType, true, feed);
 
         emit PriceRequestedV2(orderId, orderType, feed, timestamp);
     }
 
     function performUpkeep(bytes calldata performData) external {
+        //@note
+        //Intention
+        //  1) onlyForwarder
+        //  2) order is initiated
+        //  3) Calculate required fee via getFeeAndReward
+        //  4) Call verifierProxy.verify to validate the report and pay the required fee
+        //  5) Ensure NONE of the following is TRUE:
+        //      1) feedId != reportFeedId
+        //      2) current time > order.timestamp + maxOrderAgeSeconds
+        //      3) observationsTimestamp < order.timestamp
+        //  6) Pass validated price data to fulfill()
+        //Follow-up
+        //  3, 4) chainlinkVerifierProxy: https://arbiscan.io/address/0x478Aa2aC9F6D65F84e09D9185d126c3a17c2a93C
+        //  6) isDayTradingClosed = false?
+        //      -> private up keep is for day trading closed, but which upKeep is configured in pair storage so forwarder cannot bypass daytrade check
+
+        ///1 {
         if (!isForwarder[msg.sender]) {
             revert NotForwarder(msg.sender);
         }
+        //} 1
+
         (bytes memory chainlinkReport, uint256 orderId) = abi.decode(performData, (bytes, uint256));
 
         Order memory order = orders[orderId];
 
+        //2 {
         if (!order.initiated) {
             revert NotInitiated(orderId);
         }
+        //} 2
 
         (, bytes memory reportData) = abi.decode(chainlinkReport, (bytes32[3], bytes));
 
-        IVerifierProxy verifierProxy = IVerifierProxy(registry.getContractAddress('chainlinkVerifierProxy'));
+        IVerifierProxy verifierProxy = IVerifierProxy(registry.getContractAddress("chainlinkVerifierProxy"));
 
         IFeeManager feeManager = IFeeManager(address(verifierProxy.s_feeManager()));
 
+        //3
         (IFeeManager.Asset memory fee,,) = feeManager.getFeeAndReward(address(this), reportData, FEE_ADDRESS);
 
+        //4
         bytes memory verifierResponse =
             verifierProxy.verify{value: fee.amount}(chainlinkReport, abi.encode(FEE_ADDRESS));
 
@@ -128,25 +166,35 @@ contract OstiumPriceUpKeep is IOstiumPriceUpKeep, IOstiumForwarded, IPayable, In
         // Backward compatibility: if feedId is not set (old orders before upgrade), fetch from storage
         bytes32 expectedFeedId = order.feedId;
         if (expectedFeedId == bytes32(0)) {
-            expectedFeedId = IOstiumPairsStorage(registry.getContractAddress('pairsStorage')).pairFeed(order.pairIndex);
+            expectedFeedId = IOstiumPairsStorage(registry.getContractAddress("pairsStorage")).pairFeed(order.pairIndex);
         }
 
+        //5 {
         if (
             expectedFeedId != reportFeedId || block.timestamp > order.timestamp + maxOrderAgeSeconds
                 || observationsTimestamp < order.timestamp
         ) {
             revert InvalidPrice(orderId);
         }
+        //} 5
 
+        //6
         fulfill(a);
 
         emit PriceReceived(orderId, order.pairIndex, a.price, nativeFee);
     }
 
+    // PriceUpKeepAnswer {
+    //     uint256 orderId;
+    //     int192 price;
+    //     int192 bid;
+    //     int192 ask;
+    //     bool isDayTradingClosed;
+    // }
     function fulfill(PriceUpKeepAnswer memory a) internal {
         Order memory r = orders[a.orderId];
 
-        IOstiumTradingCallbacks c = IOstiumTradingCallbacks(registry.getContractAddress('callbacks'));
+        IOstiumTradingCallbacks c = IOstiumTradingCallbacks(registry.getContractAddress("callbacks"));
 
         if (r.orderType == OrderType.MARKET_OPEN) {
             c.openTradeMarketCallback(a);

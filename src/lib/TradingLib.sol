@@ -1,12 +1,12 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import './ChainUtils.sol';
+import "./ChainUtils.sol";
 
-import '@openzeppelin/contracts/utils/math/SafeCast.sol';
-import '@openzeppelin/contracts/utils/math/SignedMath.sol';
-import '../interfaces/IOstiumTrading.sol';
-import '../interfaces/IOstiumPairInfos.sol';
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts/utils/math/SignedMath.sol";
+import "../interfaces/IOstiumTrading.sol";
+import "../interfaces/IOstiumPairInfos.sol";
 
 library TradingLib {
     using SafeCast for uint256;
@@ -40,6 +40,12 @@ library TradingLib {
         uint32 takerFeeP,
         IOstiumTradingStorage.BuilderFee memory bf
     ) external view {
+        //@note
+        //Audit
+        //  L) maxAllowedCollateral, pairMinLeverage, pairMinLevPos are not rechecked in getOpenTradeMarketCancelReason() - TOCTOU
+        //Notice
+        //  maxTradesPerPair is per user cap, NOT global cap.
+
         if (
             storageT.openTradesCount(sender, t.pairIndex) + storageT.pendingMarketOpenCount(sender, t.pairIndex)
                     + storageT.openLimitOrdersCount(sender, t.pairIndex) >= storageT.maxTradesPerPair()

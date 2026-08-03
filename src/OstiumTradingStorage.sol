@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
-import '@openzeppelin/contracts/utils/math/SafeCast.sol';
-import '@openzeppelin/contracts/token/ERC20/IERC20.sol';
-import '@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol';
-import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-import './lib/ChainUtils.sol';
-import './interfaces/IOstiumTradingStorage.sol';
-import './interfaces/IOstiumRegistry.sol';
-import './interfaces/IOstiumPairInfos.sol';
+import "./lib/ChainUtils.sol";
+import "./interfaces/IOstiumTradingStorage.sol";
+import "./interfaces/IOstiumRegistry.sol";
+import "./interfaces/IOstiumPairInfos.sol";
 
 pragma solidity ^0.8.24;
 
@@ -105,7 +105,7 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
     }
 
     function _onlyTrading() internal view {
-        if (msg.sender != registry.getContractAddress('trading')) revert NotTrading(msg.sender);
+        if (msg.sender != registry.getContractAddress("trading")) revert NotTrading(msg.sender);
     }
 
     modifier onlyCallbacks() {
@@ -114,7 +114,7 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
     }
 
     function _onlyCallbacks() internal view {
-        if (msg.sender != registry.getContractAddress('callbacks')) revert NotCallbacks(msg.sender);
+        if (msg.sender != registry.getContractAddress("callbacks")) revert NotCallbacks(msg.sender);
     }
 
     modifier onlyTradingOrCallbacks() {
@@ -141,8 +141,8 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
 
     function _onlyTradingOrCallbacks() internal view {
         if (
-            msg.sender != registry.getContractAddress('trading')
-                && msg.sender != registry.getContractAddress('callbacks')
+            msg.sender != registry.getContractAddress("trading")
+                && msg.sender != registry.getContractAddress("callbacks")
         ) revert NotTradingOrCallbacks(msg.sender);
     }
 
@@ -193,19 +193,41 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
     }
 
     function storeTrade(Trade memory _trade, TradeInfo memory _tradeInfo) external onlyCallbacks {
+        //@note
+        //Intention
+        //  0) onlyCallbacks
+        //  1) Find and set the next available trade index
+        //      reverts if maxTradesPerPair is reached
+        //  2) Store openTrades, openTradesInfo
+        //  3) If new trader for the pair
+        //          3.1) add to pairTraders
+        //          3.2) Force beingMarketClosed = false and store tradeInfo
+        //          3.3) Increase openInterest
+        //  4) if buy (long) -> openInterest[pairIndex][0] += oiNotional
+        //     else          -> openInterest[pairIndex][1] += oiNotional
+
+        //1-
         _trade.index = firstEmptyTradeIndex(_trade.trader, _trade.pairIndex);
+
+        //2-
         openTrades[_trade.trader][_trade.pairIndex][_trade.index] = _trade;
 
+        //-1 {
         ++openTradesCount[_trade.trader][_trade.pairIndex];
         ++totalOpenTradesCount;
+        //} 1
 
+        //3 {
         if (openTradesCount[_trade.trader][_trade.pairIndex] == 1) {
             pairTradersId[_trade.trader][_trade.pairIndex] = pairTraders[_trade.pairIndex].length;
             pairTraders[_trade.pairIndex].push(_trade.trader);
         }
+        //} 3
 
+        //-2
         openTradesInfo[_trade.trader][_trade.pairIndex][_trade.index] = _tradeInfo;
 
+        //4
         updateOpenInterest(_trade.pairIndex, _tradeInfo.oiNotional, true, _trade.buy);
     }
 
@@ -245,23 +267,45 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         --totalOpenTradesCount;
     }
 
+    //PendingMarketOrderV2 {
+    //    uint256 block;
+    //    uint192 wantedPrice; // PRECISION_18
+    //    uint32 slippageP; // PRECISION_2 (%)
+    //    Trade trade;
+    //    uint16 percentage; // PRECISION_2 (%)
+    //}
     function storePendingMarketOrder(
         PendingMarketOrderV2 calldata _order,
         uint256 _id,
         bool _open,
         BuilderFee calldata bf
     ) external onlyTrading {
+        //@note
+        //Intention
+        //  1) Store new pending order
+        //      - push id to id list
+        //      - store new pending order
+        //      - store creation block number
+        //  2) If open       -> increment pending open count and store builder fee data
+        //     Else (close)  -> increment pending close count
+        //Audit
+        //  N) 1) No matter what `_order.block` is, it will be overwritten
+
+        //1 {
         pendingOrderIds[_order.trade.trader].push(_id);
 
         reqID_pendingMarketOrder[_id] = _order;
         reqID_pendingMarketOrder[_id].block = ChainUtils.getBlockNumber();
+        //} 1
 
+        //2 {
         if (_open) {
             pendingMarketOpenCount[_order.trade.trader][_order.trade.pairIndex]++;
             builderData[_order.trade.trader][_order.trade.pairIndex][_id] = bf;
         } else {
             pendingMarketCloseCount[_order.trade.trader][_order.trade.pairIndex]++;
         }
+        //} 2
     }
 
     function storePendingMarketCloseTradeId(uint256 orderId, uint256 tradeId) external onlyTrading {
@@ -415,6 +459,10 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
     }
 
     function updateTrade(Trade calldata _t) external onlyTradingOrCallbacks {
+        //@note
+        //Follow-up
+        //  Why i.initialLeverage = max(i.initialLeverage, _t.leverage)?
+
         IOstiumTradingStorage.Trade storage t = openTrades[_t.trader][_t.pairIndex][_t.index];
         IOstiumTradingStorage.TradeInfo storage i = openTradesInfo[_t.trader][_t.pairIndex][_t.index];
 
@@ -447,7 +495,7 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
 
         int256 oiDelta = oiLong.toInt256() - oiShort.toInt256();
 
-        (devFee, vaultFee) = IOstiumPairInfos(registry.getContractAddress('pairInfos'))
+        (devFee, vaultFee) = IOstiumPairInfos(registry.getContractAddress("pairInfos"))
             .getOpeningFee(
                 _pairIndex,
                 isBuy ? _leveragedPositionSize.toInt256() : -_leveragedPositionSize.toInt256(),

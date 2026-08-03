@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-import './TokenInterfaceV5.sol';
-import './IOstiumVault.sol';
-import './IOstiumPairsStorage.sol';
-import './IOstiumPriceUpKeep.sol';
+import "./TokenInterfaceV5.sol";
+import "./IOstiumVault.sol";
+import "./IOstiumPairsStorage.sol";
+import "./IOstiumPriceUpKeep.sol";
 
 pragma solidity ^0.8.24;
 
@@ -31,7 +31,7 @@ interface IOstiumTradingStorage {
         uint32 leverage; // PRECISION_2
         uint16 pairIndex;
         uint8 index;
-        bool buy;
+        bool buy; // true = long, false = short
         bool isDayTrade;
     }
 

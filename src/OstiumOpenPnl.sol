@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
-import './interfaces/IOwnable.sol';
-import './interfaces/IOstiumVault.sol';
-import './interfaces/IOstiumOpenPnl.sol';
-import './interfaces/IOstiumRegistry.sol';
-import './interfaces/IOstiumTradingStorage.sol';
-import './interfaces/IOstiumPairInfos.sol';
+import "./interfaces/IOwnable.sol";
+import "./interfaces/IOstiumVault.sol";
+import "./interfaces/IOstiumOpenPnl.sol";
+import "./interfaces/IOstiumRegistry.sol";
+import "./interfaces/IOstiumTradingStorage.sol";
+import "./interfaces/IOstiumPairInfos.sol";
 
-import '@openzeppelin/contracts/utils/math/SafeCast.sol';
-import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 pragma solidity ^0.8.24;
 
@@ -78,7 +78,7 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
     }
 
     function _onlyCallbacks() internal view {
-        if (msg.sender != registry.getContractAddress('callbacks')) revert NotCallbacks(msg.sender);
+        if (msg.sender != registry.getContractAddress("callbacks")) revert NotCallbacks(msg.sender);
     }
 
     modifier onlyPairInfos() {
@@ -87,7 +87,7 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
     }
 
     function _onlyPairInfos() internal view {
-        if (msg.sender != registry.getContractAddress('pairInfos')) revert NotPairInfos(msg.sender);
+        if (msg.sender != registry.getContractAddress("pairInfos")) revert NotPairInfos(msg.sender);
     }
 
     function getOpenPnl() public view returns (int256) {
@@ -111,6 +111,17 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
         bool buy,
         bool open
     ) external onlyCallbacks {
+        //@note
+        //Intention
+        //  1) If open -> add profit/loss to accTotalPnl: accTotalPnl -= oiNotionalSigned * (openPrice - oraclePrice)
+        //     Else    -> add profit/loss to accTotalPnl: accTotalPnl -= oiNotionalSigned * (oraclePrice - closePrice)
+        //                add profit/loss to accClosedPnl: accClosedPnl -= oiNotionalSigned * (openPrice - closePrice)
+        //Audit
+        //  remove/topUp collateral affect oiNotional but don't be refelected in accTotalPnl, accNetOiUnits, accClosedPnl
+        //Follow-up
+        //  1) In "Else" case, why accTotalPnl use oraclePrice, accClosedPnl use closePrice?
+        //      -> current loss/profit is calculated by oraclePrice, but total profit/loss is calculated by closePrice
+
         int256 oiNotionalSigned = buy ? oiNotional.toInt256() : -oiNotional.toInt256();
 
         if (open) {
@@ -158,10 +169,10 @@ contract OstiumOpenPnl is IOstiumOpenPnl, Initializable {
             }
             currentNotional[pairIndex][long] -= notional;
 
-            int256 initAccRollover = IOstiumPairInfos(registry.getContractAddress('pairInfos'))
+            int256 initAccRollover = IOstiumPairInfos(registry.getContractAddress("pairInfos"))
                 .getTradeInitialAccRolloverFeesPerCollateral(t.trader, t.pairIndex, t.index);
             int256 currentAccRollover =
-                IOstiumPairInfos(registry.getContractAddress('pairInfos')).getAccRollover(t.pairIndex, t.buy);
+                IOstiumPairInfos(registry.getContractAddress("pairInfos")).getAccRollover(t.pairIndex, t.buy);
             accClosedRollover += getRolloverFee(currentAccRollover - initAccRollover, notional);
         }
         emit OpenRolloverUpdated(pairIndex, long, accTotalRollover, accClosedRollover, currentNotional[pairIndex][long]);

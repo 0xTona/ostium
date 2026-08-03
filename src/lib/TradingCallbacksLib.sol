@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import '@openzeppelin/contracts/utils/math/SafeCast.sol';
-import '@openzeppelin/contracts/utils/math/SignedMath.sol';
-import '@openzeppelin/contracts/utils/math/Math.sol';
-import '../interfaces/IOstiumTradingStorage.sol';
-import '../interfaces/IOstiumPairInfos.sol';
-import '../interfaces/IOstiumRegistry.sol';
-import '../interfaces/IOstiumVault.sol';
-import '../interfaces/IOstiumPairsStorage.sol';
-import '../interfaces/IOstiumTradingCallbacks.sol';
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts/utils/math/SignedMath.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
+import "../interfaces/IOstiumTradingStorage.sol";
+import "../interfaces/IOstiumPairInfos.sol";
+import "../interfaces/IOstiumRegistry.sol";
+import "../interfaces/IOstiumVault.sol";
+import "../interfaces/IOstiumPairsStorage.sol";
+import "../interfaces/IOstiumTradingCallbacks.sol";
 
 library TradingCallbacksLib {
     using SafeCast for uint256;
@@ -41,13 +41,23 @@ library TradingCallbacksLib {
         pure
         returns (uint256 priceImpactP, uint256 priceAfterImpact)
     {
+        //@note
+        //Intention
+        //  1) Open long or close short => usedPrice = ask
+        //     Else                     => usedPrice = bid
+        //  2) priceImpactP = |price - usedPrice| * 1e18 * 100 / price
+
         if (price == 0) {
             return (0, 0);
         }
+
+        //1 {
         bool aboveSpot = (isOpen == isLong);
 
         int192 usedPrice = aboveSpot ? ask : bid;
+        //} 1
 
+        //2
         priceImpactP = (SignedMath.abs(price - usedPrice) * PRECISION_18 * 100 / uint192(price));
 
         return (priceImpactP, uint192(usedPrice));
@@ -60,12 +70,31 @@ library TradingCallbacksLib {
         int32 leverage,
         int32 initialLeverage
     ) internal pure returns (int256 p, int256 maxPnlP) {
+        //@note
+        //Intention
+        //  1) maxPnlP = 900% * 1e6 * leverage / max(leverage, initialLeverage)
+        //  2) if long  -> p = max(maxPnlP, (currentPrice - openPrice) * 1e6 * leverage / openPrice)
+        //     if short -> p = max(maxPnlP, (openPrice - currentPrice) * 1e6 * leverage / openPrice)
+        //Audit
+        //  N) 2) Round down p -> favor protocol
+        //Follow-up
+        //  1) 900%?
+        //      -> If collateral = 100$ -> max profit = 900$ (10x)
+        //  1) leverage / max(leverage, initialLeverage)?
+        //      -> If add collateral -> leverage decrease -> maxPnlP decrease
+        //      Ex: collateral = 100$, leverage = 10x -> maxPnlP = 900% -> maxPnl = 900$
+        //          -> Add 100$ -> collateral = 200$, leverage = 5x If maxPnlP = 900% -> maxPnl = 1800$ (wrong)
+        //                                                          But maxPnlP = 450% -> maxPnl = 900$ (correct)
+
+        //1
         maxPnlP = int16(MAX_GAIN_P) * int32(PRECISION_6) * int256(leverage)
             / (leverage > initialLeverage ? leverage : initialLeverage);
 
+        //2 {
         p = (buy ? currentPrice - openPrice : openPrice - currentPrice) * int32(PRECISION_6) * leverage / openPrice;
 
         p = p > maxPnlP ? maxPnlP : p;
+        //} 2
     }
 
     function currentPercentProfit(
@@ -83,6 +112,13 @@ library TradingCallbacksLib {
         pure
         returns (uint192)
     {
+        //@note
+        //Intention
+        //  If user don't set tp (tp == 0) || new tp exceed 900% max profit -> 900% max profit is automatically set as tp
+        //      tpDiff = openPrice * |maxPnlP| / leverage
+        //      If long  -> tp = openPrice + tpDiff
+        //      Else     -> tp = max(0, openPrice - tpDiff)
+
         (int256 p, int256 maxPnlP) =
             _currentPercentProfit(openPrice.toInt256(), tp.toInt256(), buy, int32(leverage), int32(initialLeverage));
 
@@ -115,9 +151,15 @@ library TradingCallbacksLib {
         bool buy,
         uint8 maxSl_P
     ) external pure returns (uint192) {
-        (int256 p,) = _currentPercentProfit(
-            openPrice.toInt256(), sl.toInt256(), buy, int32(leverage), int32(initialLeverage)
-        );
+        //@note
+        //Intention
+        //  When user remove collateral, old sl can exceed maxSl_P -> delete sl
+        //Follow-up
+        //  Why don't use correctSl()?
+        //      -> Because correctSl() can close trade immediately
+
+        (int256 p,) =
+            _currentPercentProfit(openPrice.toInt256(), sl.toInt256(), buy, int32(leverage), int32(initialLeverage));
         if (sl > 0 && p < int8(maxSl_P) * int32(PRECISION_6) * -1) {
             return 0;
         }
@@ -156,6 +198,11 @@ library TradingCallbacksLib {
         IOstiumPairsStorage pairsStorage,
         IOstiumTradingStorage tradingStorage
     ) public view returns (bool) {
+        //@note
+        //Audit
+        //  L) openInterest and groupCollateral are updated with "post fee collateral", but the limit check is done with "pre fee collateral"
+        //      -> prevent legitimate trade on extreme case
+
         return tradingStorage.openInterest(pairIndex, buy ? 0 : 1) * price / PRECISION_18 / 1e12 + collateral * leverage
                     / 100 <= tradingStorage.openInterest(pairIndex, 2)
             && pairsStorage.groupCollateral(pairIndex, buy) + collateral <= pairsStorage.groupMaxCollateral(pairIndex);
@@ -326,9 +373,18 @@ library TradingCallbacksLib {
         IOstiumPairsStorage pairsStorage,
         uint32 initialLeverage
     ) external returns (IOstiumTradingCallbacks.CancelReason) {
-        TradingCallbacksLib.PriceImpactResult memory result = getDynamicTradePriceImpact(
-            a.price, a.ask, a.bid, false, trade, pairInfos, trade.collateral
-        );
+        //@note
+        //Intention
+        //  1) If maxLeverage == 0                                               -> return MAX_LEVERAGE
+        //  2) If removing this collateral would liquidate the trade immediately -> return UNDER_LIQUIDATION
+        //  3) If new leverage > protocol limits                                 -> return MAX_LEVERAGE
+        //  7) If profitP == maxPnlP                                             -> return GAIN_LOSS
+        //  8) Return NONE
+        //Assumption
+        //  `trade.leverage`, `trade.collateral` in memory has already been updated by caller to reflect the post-removal state
+
+        TradingCallbacksLib.PriceImpactResult memory result =
+            getDynamicTradePriceImpact(a.price, a.ask, a.bid, false, trade, pairInfos, trade.collateral);
 
         (int256 profitP, int256 maxPnlP) = currentPercentProfit(
             trade.openPrice.toInt256(),
@@ -338,11 +394,13 @@ library TradingCallbacksLib {
             int32(initialLeverage)
         );
 
+        //1 {
         uint32 maxLeverage = getEffectiveMaxLeverage(trade.pairIndex, trade.isDayTrade, pairsStorage);
 
         if (maxLeverage == 0) {
             return IOstiumTradingCallbacks.CancelReason.MAX_LEVERAGE;
         }
+        //} 1
 
         (uint256 tradeValue, uint256 liqMarginValue,,) = pairInfos.getTradeValue(
             trade.trader,
@@ -355,23 +413,31 @@ library TradingCallbacksLib {
             maxLeverage
         );
 
+        //2 {
         bool isLiquidated = tradeValue < liqMarginValue;
         uint256 usdcSentToTrader = isLiquidated ? 0 : tradeValue;
 
         if (usdcSentToTrader == 0) {
             return IOstiumTradingCallbacks.CancelReason.UNDER_LIQUIDATION;
         }
+        //} 2
 
+        //3 {
         // Check leverage against appropriate max based on trade type (not market state)
         if (!withinMaxLeverage(trade.pairIndex, trade.leverage, trade.isDayTrade, pairsStorage)) {
             return IOstiumTradingCallbacks.CancelReason.MAX_LEVERAGE;
         }
+        //} 3
 
+        //7 {
         if (profitP == maxPnlP) {
             return IOstiumTradingCallbacks.CancelReason.GAIN_LOSS;
         }
+        //} 7
 
+        //8 {
         return IOstiumTradingCallbacks.CancelReason.NONE;
+        //} 8
     }
 
     function _decayVolumeWithPade(uint256 volume, uint32 decayInterval, uint128 decayRate)
@@ -400,9 +466,65 @@ library TradingCallbacksLib {
         uint256 askPrice,
         uint256 bidPrice
     ) internal pure returns (uint256 priceImpactP) {
-        uint256 spreadComponent = (askPrice - bidPrice) * PRECISION_18 * 100 / (midPrice * 2);
-        uint256 dynamicComponent = 0;
+        //@note
+        //Information
+        //  - spread cost: fee for crossing the spread (ask - bid) to enter a trade
+        //  - dynamic cost: fee for unbalancing the market
+        //Intention
+        //  PriceImpactP = (spreadCost + dynamicCost) * 100 / tradeSize
+        //     1) spreadComponent = spreadCost * 100 / tradeSize = (askPrice - bidPrice) * 1e18 * 100 / (midPrice * 2)
+        //     2) dynamicComponent = dynamicCost * 100 / tradeSize
+        //          If market after trade's balanced     -> dynamicComponent = 0
+        //          Else market after trade's unbalanced
+        //              If initialVol < netVolThreshold  -> dynamicComponent = priceImpactK * (excessVol^2 / (2 * tradeSize)) * 100 / 1e27
+        //                  Slippage Penalty Rate
+        //                       ^
+        //                       |                                        End of Trade
+        //                       |                                            /|  <--- Max Penalty: priceImpactK * excessVol
+        //                       |                                           / |
+        //                       |                                          /  |
+        //                       |                                        /    |  <--- This area is a Triangle!
+        //                       |                                      /      |       Base = excessVol
+        //                       |                                    /        |       Height = Max Penalty = priceImpactK * excessVol
+        //                       |                                  /    S     |       -> S = 1/2 * Base * Height = priceImpactK * excessVol^2 / 2
+        //                       |   Start of Trade     Threshold /            |
+        //                       |          |               |  /               |
+        //                       |__________|_______________|/_________________|__> Market Imbalance
+        //                                  ^               ^                  ^
+        //                              initialVol    netVolThreshold        finalVol
+        //                                                               (initialVol + tradeSize)
+        //                       |----------- 0 Fee --------|---- excessVol ---|
+        //                                  |------------- tradeSize ----------|
+        //
+        //              Else                             -> dynamicComponent = priceImpactK * (initialVol - netVolThreshold + tradeSize / 2) * 100 / 1e27
+        //                  Slippage Penalty Rate
+        //                        ^                                              End of Trade
+        //                        |                                              /   |
+        //                        |                                           /      |
+        //                        |                                        /         |
+        //                        |                                     /            |
+        //                        |                                  /               |
+        //                        |                               /                  |   S1 = 1/2 * priceImpactK * (Start - Threshold)^2
+        //                        |                            /                     |   S2 = 1/2 * priceImpactK * (End - Threshold)^2
+        //                        |                         /                        |   S = S2 - S1 = k * tradeSize * (initVol + tradeSize / 2 - netVolThreshold)
+        //                        |                 Start of Trade                   |
+        //                        |                    /  |            S             |
+        //                        |                  /    |                          |
+        //                        |                /      |                          |
+        //                        |      Threshold/       |                          |
+        //                        |          | /          |                          |
+        //                        |__________/____________|__________________________|__> Market Imbalance
+        //                                   ^            ^                          ^
+        //                             netVolThreshold    |                       finalVol
+        //                                                |                  (initialVol + tradeSize)
+        //                                            initialVol
+        //                                                |------- tradeSize --------|
 
+        //1
+        uint256 spreadComponent = (askPrice - bidPrice) * PRECISION_18 * 100 / (midPrice * 2);
+
+        //2 {
+        uint256 dynamicComponent = 0;
         uint256 finalVol = tradeSize + initialVol;
         if (finalVol > netVolThreshold) {
             uint256 excessVol = finalVol - netVolThreshold;
@@ -410,6 +532,7 @@ library TradingCallbacksLib {
                 ? priceImpactK * excessVol * excessVol * 100 / (2 * tradeSize) / PRECISION_27
                 : priceImpactK * (initialVol - netVolThreshold + tradeSize / 2) * 100 / PRECISION_27;
         }
+        //} 2
 
         priceImpactP = spreadComponent + dynamicComponent;
         return priceImpactP;
@@ -424,15 +547,31 @@ library TradingCallbacksLib {
         IOstiumPairInfos pairInfos,
         uint256 collateralValue
     ) public returns (PriceImpactResult memory) {
+        //@note
+        //Intention
+        //  1) If `priceImpactK == 0` -> Use static price impact
+        //  2) Decay buy and sell volumes using Pade approximation over `dt`
+        //  3) Calculate dynamic price impact `priceImpactP`
+        //  4) If `priceImpactP > 0`:
+        //      4.1) If `isOpen == trade.buy` -> Push price up (buyer pay more to enter)
+        //      4.2) Else                     -> Push price lower (floored at 0)
+        //Audit
+        //  4.2) Don't revert but floor at 0.
+        //      -> Is it volatile with sandwich attack?
+
         uint256 priceImpactK = pairInfos.getPairPriceImpactK(trade.pairIndex);
 
         uint256 priceImpactP;
         uint256 priceAfterImpact;
+
+        //1 {
         if (priceImpactK == 0) {
             (priceImpactP, priceAfterImpact) = _getTradePriceImpact(price, ask, bid, isOpen, trade.buy);
             return PriceImpactResult({priceImpactP: priceImpactP, priceAfterImpact: priceAfterImpact, isDynamic: false});
         }
+        //} 1
 
+        //2 {
         (uint256 netVolThreshold, uint128 decayRate,) = pairInfos.pairDynamicSpreadParams(trade.pairIndex);
 
         (uint256 buyVolume, uint256 sellVolume, uint32 lastUpdateTimestamp) =
@@ -443,7 +582,9 @@ library TradingCallbacksLib {
 
         uint256 initialVolume = (trade.buy == isOpen) ? buyVolume : sellVolume;
         initialVolume = _decayVolumeWithPade(initialVolume, dt, effectiveDecayRate);
+        //} 2
 
+        //3 {
         uint256 tradeNotional = collateralValue * trade.leverage * PRECISION_10;
 
         priceAfterImpact = uint192(price);
@@ -451,11 +592,17 @@ library TradingCallbacksLib {
         priceImpactP = _priceImpactFunction(
             netVolThreshold, priceImpactK, tradeNotional, initialVolume, uint192(price), uint192(ask), uint192(bid)
         );
+        //} 3
 
+        //4 {
         if (priceImpactP > 0) {
+            //4.1 {
             if (isOpen == trade.buy) {
                 priceAfterImpact = priceAfterImpact * (PRECISION_18 + (priceImpactP / 100)) / PRECISION_18;
-            } else {
+            }
+            //} 4.1
+            //4.2 {
+            else {
                 if (priceImpactP < 100e18) {
                     priceAfterImpact = priceAfterImpact * (PRECISION_18 - (priceImpactP / 100)) / PRECISION_18;
                 } else {
@@ -463,7 +610,9 @@ library TradingCallbacksLib {
                     priceImpactP = 100e18;
                 }
             }
+            //} 4.2
         }
+        //} 4
 
         return PriceImpactResult({priceImpactP: priceImpactP, priceAfterImpact: priceAfterImpact, isDynamic: true});
     }
@@ -563,42 +712,72 @@ library TradingCallbacksLib {
             uint256 builderFee
         )
     {
+        //@note
+        //Intention
+        //  1) Charge fees
+        //      1.1) dev fee: deduct from collateral
+        //      1.2) vault fee: transfer to vault, deduct from collateral
+        //      1.3) oracle fee: deduct from collateral
+        //      1.4) builder fee: transfer to collateral, deduct from  collateral
+        //  2) Correct TP/SL
+        //  3) Store opening fees
+        //  4) Update pair total collateral
+        //  5) Store trade info
+        //Follow-up
+        //  A) 2) Why don't it correct TP/SL in the correct trade opening flow?
+        //      -> Don't know `openPrice` at this time
+
         uint256 tradeNotional = Math.mulDiv(trade.collateral, trade.leverage, 100, Math.Rounding.Ceil);
 
+        //1 {
         // 2.1 Charge opening fee
         {
             (reward, vaultReward) =
                 storageT.handleOpeningFees(trade.pairIndex, latestPrice, tradeNotional, trade.leverage, trade.buy);
 
+            //1.1
             trade.collateral -= reward;
 
+            //1.2 {
             if (vaultReward > 0) {
                 storageT.transferUsdc(address(storageT), address(this), vaultReward);
                 vault.distributeReward(vaultReward);
                 trade.collateral -= vaultReward;
             }
+            //} 1.2
         }
 
+        //1.3 {
         oracleFee = pairsStorage.pairOracleFee(trade.pairIndex);
         storageT.handleOracleFee(oracleFee);
         trade.collateral -= oracleFee;
+        //} 1.3
 
+        //1.4 {
         if (bf.builder != address(0) && bf.builderFee > 0) {
             builderFee = bf.builderFee * tradeNotional / PRECISION_6 / 100;
             storageT.transferUsdc(address(storageT), bf.builder, builderFee);
             trade.collateral -= builderFee;
         }
+        //} 1.4
+        //} 1
 
+        //2 {
         // 4. Set trade final details
         trade.index = storageT.firstEmptyTradeIndex(trade.trader, trade.pairIndex);
 
         trade.tp = correctTp(trade.openPrice, trade.tp, trade.leverage, trade.leverage, trade.buy);
         trade.sl = correctSl(trade.openPrice, trade.sl, trade.leverage, trade.leverage, trade.buy, maxSl_P);
+        //} 2
 
         // 5. Call other contracts
+        //3
         pairInfos.storeTradeInitialAccFees(tradeId, trade.trader, trade.pairIndex, trade.index, trade.buy);
+
+        //4
         pairsStorage.updateGroupCollateral(trade.pairIndex, trade.collateral, trade.buy, true);
 
+        //5 {
         // 6. Store final trade in storage contract
         uint32 currTimestamp = block.timestamp.toUint32();
         storageT.storeTrade(
@@ -613,6 +792,7 @@ library TradingCallbacksLib {
                 false
             )
         );
+        //} 5
 
         return (trade, reward, vaultReward, oracleFee, builderFee);
     }

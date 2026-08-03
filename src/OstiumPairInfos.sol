@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: MIT
-import '@openzeppelin/contracts/utils/math/SignedMath.sol';
-import '@openzeppelin/contracts/utils/math/Math.sol';
-import '@openzeppelin/contracts/utils/math/SafeCast.sol';
-import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import "@openzeppelin/contracts/utils/math/SignedMath.sol";
+import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
-import './lib/ChainUtils.sol';
-import './interfaces/IOstiumRegistry.sol';
-import './interfaces/IOstiumPairInfos.sol';
-import './interfaces/IOstiumTradingStorage.sol';
-import './interfaces/IOstiumOpenPnl.sol';
+import "./lib/ChainUtils.sol";
+import "./interfaces/IOstiumRegistry.sol";
+import "./interfaces/IOstiumPairInfos.sol";
+import "./interfaces/IOstiumTradingStorage.sol";
+import "./interfaces/IOstiumOpenPnl.sol";
 
 pragma solidity ^0.8.24;
 
@@ -142,7 +142,7 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
     }
 
     function _onlyCallbacks() internal view {
-        if (msg.sender != registry.getContractAddress('callbacks')) revert NotCallbacks(msg.sender);
+        if (msg.sender != registry.getContractAddress("callbacks")) revert NotCallbacks(msg.sender);
     }
 
     modifier onlyGovOrManager() {
@@ -443,9 +443,9 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
         r.accPerOiShort = getPendingAccRolloverFees(pairId, false);
         r.lastUpdateBlock = ChainUtils.getBlockNumber().toUint32();
 
-        IOstiumOpenPnl(registry.getContractAddress('openPnl'))
+        IOstiumOpenPnl(registry.getContractAddress("openPnl"))
             .updateAccTotalRollover(pairId, true, prevAccPerOiLong, r.accPerOiLong);
-        IOstiumOpenPnl(registry.getContractAddress('openPnl'))
+        IOstiumOpenPnl(registry.getContractAddress("openPnl"))
             .updateAccTotalRollover(pairId, false, prevAccPerOiShort, r.accPerOiShort);
 
         emit AccRolloverFeesStoredV2(pairId, r.accPerOiLong, r.accPerOiShort, r.lastUpdateBlock);
@@ -508,9 +508,19 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
         external
         onlyCallbacks
     {
+        //@note
+        //Intention
+        //  1) storeAccFundingFees
+        //  2) storeAccRolloverFees
+        //  3) storeTradeInitialAccFees
+
+        //1
         storeAccFundingFees(pairIndex);
+
+        //2
         storeAccRolloverFees(pairIndex);
 
+        //3 {
         TradeInitialAccFees storage t = tradeInitialAccFees[trader][pairIndex][index];
 
         int256 rollover =
@@ -518,6 +528,7 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
         t.isRolloverSignNegative = rollover < 0;
         t.rollover = rollover.abs();
         t.funding = long ? pairFundingFees[pairIndex].accPerOiLong : pairFundingFees[pairIndex].accPerOiShort;
+        //} 3
 
         emit TradeInitialAccFeesStoredV2(
             tradeId, trader, pairIndex, index, rollover, t.isRolloverSignNegative, t.funding
@@ -559,6 +570,13 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
     }
 
     function getPendingAccRolloverFees(uint16 pairIndex, bool long) public view returns (int256) {
+        //Intention
+        //  newAccRolloverFee = oldAccRolloverFee + rate * time
+        //      If long  -> rate = lastLongPure + brokerPremium
+        //                  accRolloverFee: accPerOiLong
+        //      If short -> rate = max(0, -lastLongPure + brokerPremium)
+        //                  accRolloverFee: accPerOiShort
+
         PairRolloverFeesV2 memory r = pairRolloverFeesV2[pairIndex];
 
         int256 currentAccRolloverFee = long ? r.accPerOiLong : r.accPerOiShort;
@@ -590,9 +608,13 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
         view
         returns (int256 oiDelta, int256 openInterestLong, int256 openInterestShort)
     {
-        IOstiumTradingStorage storageT = IOstiumTradingStorage(registry.getContractAddress('tradingStorage'));
+        //@note
+        //Intention
+        //  oiDelta = (openInterestLong - openInterestShort) * 1e6 / max(openInterestLong, openInterestShort, openInterestCap)
 
-        int256 price = IOstiumOpenPnl(registry.getContractAddress('openPnl')).lastTradePrice(pairIndex);
+        IOstiumTradingStorage storageT = IOstiumTradingStorage(registry.getContractAddress("tradingStorage"));
+
+        int256 price = IOstiumOpenPnl(registry.getContractAddress("openPnl")).lastTradePrice(pairIndex);
 
         int256 openInterestCap = storageT.openInterest(pairIndex, 2).toInt256();
         openInterestLong = storageT.openInterest(pairIndex, 0).toInt256() * price / int64(PRECISION_18) / 1e12;
@@ -605,18 +627,45 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
     }
 
     function getPendingAccFundingFees(uint16 pairIndex) public view returns (int256, int256, int64, int256) {
+        //@note
+        //Intention
+        //  2) oiDelta = (openInterestLong - openInterestShort) * 1e6 / max(openInterestLong, openInterestShort, openInterestCap)
+        //  3) targetFr = hill * hillScale + hillInflectionPoint
+        //      where hill = x^2 / (k + x^2)
+        //            x = a * oiDelta
+        //  4) sFactor for the rate adjustment:
+        //      If rate is moving away from 0 in same direction -> use base `springFactor`
+        //      If rate is moving towards 0 (mean reversion)    -> use scaled-down `sFactorDownScaleP * springFactor / 100`
+        //      Else (rate is crossing 0 / flipping direction)  -> use scaled-up `sFactorUpScaleP * springFactor / 100`
+        //  5) accFundingRate = targetFr * t + (1 - e^-(sFactor * t)) * (lastRate - targetFr) / sFactor
+        //  7) fr = targetFr + (lastRate - targetFr) * e^-(sFactor * t)
+        //  8) Apply accumulated funding fees to Long and Short accumulators:
+        //      If accFundingRate > 0 -> Longs pay Shorts
+        //                                  valueLong += accFundingRate
+        //                                  valueShort -= max(accFundingRate * openInterestLong / openInterestShort, 0)
+        //      Else                  -> Shorts pay Longs
+        //                                  valueLong += max(accFundingRate * openInterestShort / openInterestLong, 0)
+        //                                  valueShort -= accFundingRate
+        //Follow-up
+        //  8) 0?
+        //      -> empty receivers -> reward is not distributed to anyone, but the funding rate is still applied to the open positions
+
         PairFundingFeesV2 memory f = pairFundingFees[pairIndex];
 
         int256 valueLong = f.accPerOiLong;
         int256 valueShort = f.accPerOiShort;
 
+        //1
         (int256 oiDelta, int256 openInterestLong, int256 openInterestShort) = getOiDelta(pairIndex);
+
         uint256 numBlocksToCharge = ChainUtils.getBlockNumber() - f.lastUpdateBlock;
 
+        //2
         int256 targetFr = getTargetFundingRate(
             oiDelta, f.hillInflectionPoint, f.maxFundingFeePerBlock, f.hillPosScale, f.hillNegScale
         );
 
+        //4 {
         uint256 sFactor;
         if (f.lastFundingRate * targetFr >= 0) {
             if (targetFr.abs() > f.lastFundingRate.abs()) {
@@ -627,13 +676,19 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
         } else {
             sFactor = uint256(f.sFactorUpScaleP) * f.springFactor / 100e2;
         }
+        //} 4
 
+        //5
         int256 exp = exponentialApproximation(-(sFactor * numBlocksToCharge).toInt256()).toInt256();
 
         int256 accFundingRate = targetFr * numBlocksToCharge.toInt256() + (int64(PRECISION_18) - exp)
             * (f.lastFundingRate - targetFr) / sFactor.toInt256();
+        //} 5
+
+        //6
         int64 fr = (targetFr + (f.lastFundingRate - targetFr) * exp / int64(PRECISION_18)).toInt64();
 
+        //7 {
         if (accFundingRate > 0) {
             if (openInterestLong > 0) {
                 valueLong += accFundingRate;
@@ -645,6 +700,7 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
                 valueLong += openInterestLong > 0 ? accFundingRate * openInterestShort / openInterestLong : int8(0);
             }
         }
+        //} 7
 
         return (valueLong, valueShort, fr, oiDelta);
     }
@@ -696,6 +752,37 @@ contract OstiumPairInfos is IOstiumPairInfos, Initializable {
         uint16 hillPosScale,
         uint16 hillNegScale
     ) private pure returns (int256) {
+        //Intention
+        //  hill = x^2 / (k + x^2)
+        //      -> curve smoothly increasing from 0 to 1 as x increases
+        //  targetFr = hill * hillScale + hillInflectionPoint
+        //      -> y-axis
+        //      -> funding rate that is charged to the traders
+        //
+        //                                 + Max Funding Rate
+        //                                       ^
+        //                                       |              . ' . - ~ ~ ~ ~ ~ - .' .
+        //                                       |            /
+        //                                       |          /
+        //                                       |        /
+        //                                       |      /
+        //                                       |    /
+        //                                       |  /
+        //                                       |/
+        //                                       * <-- hillInflectionPoint
+        //                                     / |
+        // <---------------------------------/---|---------------------------------------> OI Delta
+        //                                 /     |                         (Longs > Shorts)
+        //                               /       |
+        //                             /         |
+        //                           /           |
+        //                         /             |
+        //                       /               |
+        //                  _ _ '                |
+        //                                       |
+        //                                       v
+        //                           - Max Funding Rate
+
         int64 a = 184;
         int64 k = 16;
         int256 x = (a * normalizedOiDelta) / int8(PRECISION_2);

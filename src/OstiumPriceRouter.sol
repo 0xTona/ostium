@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.24;
 
-import './interfaces/IOstiumRegistry.sol';
-import './interfaces/IOstiumPriceUpKeep.sol';
-import './interfaces/IOstiumPriceRouter.sol';
+import "./interfaces/IOstiumRegistry.sol";
+import "./interfaces/IOstiumPriceUpKeep.sol";
+import "./interfaces/IOstiumPriceRouter.sol";
 
-import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 
 contract OstiumPriceRouter is IOstiumPriceRouter, Initializable {
     IOstiumRegistry public registry;
@@ -49,7 +49,7 @@ contract OstiumPriceRouter is IOstiumPriceRouter, Initializable {
     }
 
     function _onlyTrading() private view {
-        if (msg.sender != registry.getContractAddress('trading')) {
+        if (msg.sender != registry.getContractAddress("trading")) {
             revert NotTrading(msg.sender);
         }
     }
@@ -72,16 +72,29 @@ contract OstiumPriceRouter is IOstiumPriceRouter, Initializable {
         onlyTrading
         returns (uint256)
     {
+        //@note
+        //Intention
+        //  1) Guard:
+        //      onlyTrading
+        //      if timestamp is in the future or too old -> revert
+        //  2) Increment currentOrderId, delegate to price upkeep contract
+        //Audit
+        //  Each pair oracle
+
+        //1 {
         if (timestamp > block.timestamp || (block.timestamp - timestamp > maxTsValidity)) {
             revert WrongTimestamp();
         }
+        //} 1
 
+        //2 {
         ++currentOrderId;
         string memory priceUpkeepType =
-            IOstiumPairsStorage(registry.getContractAddress('pairsStorage')).oracle(pairIndex);
+            IOstiumPairsStorage(registry.getContractAddress("pairsStorage")).oracle(pairIndex);
         IOstiumPriceUpKeep(
-                payable(registry.getContractAddress(bytes32(abi.encodePacked(priceUpkeepType, 'PriceUpkeep'))))
+                payable(registry.getContractAddress(bytes32(abi.encodePacked(priceUpkeepType, "PriceUpkeep"))))
             ).getPrice(currentOrderId, pairIndex, orderType, timestamp);
+        //} 2
 
         return currentOrderId;
     }

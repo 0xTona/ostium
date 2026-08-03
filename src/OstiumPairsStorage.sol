@@ -1,11 +1,11 @@
 // SPDX-License-Identifier: MIT
-import '@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol';
-import '@openzeppelin/contracts/utils/math/SafeCast.sol';
+import "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
 
-import './interfaces/IOstiumVault.sol';
-import './interfaces/IOstiumRegistry.sol';
-import './interfaces/IOstiumPairsStorage.sol';
-import './interfaces/IOstiumTradingStorage.sol';
+import "./interfaces/IOstiumVault.sol";
+import "./interfaces/IOstiumRegistry.sol";
+import "./interfaces/IOstiumPairsStorage.sol";
+import "./interfaces/IOstiumTradingStorage.sol";
 
 pragma solidity ^0.8.24;
 
@@ -186,7 +186,7 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
     }
 
     function removePair(uint16 _pairIndex) external onlyGov pairListed(_pairIndex) {
-        if (IOstiumTradingStorage(registry.getContractAddress('tradingStorage')).pairTradersCount(_pairIndex) > 0) {
+        if (IOstiumTradingStorage(registry.getContractAddress("tradingStorage")).pairTradersCount(_pairIndex) > 0) {
             revert PairNotEmpty();
         }
 
@@ -224,11 +224,21 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         external
         pairListed(_pairIndex)
     {
+        //@note
+        //Intention
+        //  1) Guard:
+        //      pairListed
+        //      onlyCallbacks or onlyTrading
+        //  2) if long  -> collateralOpen[0] += _amount
+        //     else     -> collateralOpen[1] = max(collateralOpen[1] - _amount, 0)
+
+        //-1
         if (
-            msg.sender != registry.getContractAddress('callbacks')
-                && msg.sender != registry.getContractAddress('trading')
+            msg.sender != registry.getContractAddress("callbacks")
+                && msg.sender != registry.getContractAddress("trading")
         ) revert NotAuthorized(msg.sender);
 
+        //2 {
         uint256[2] storage collateralOpen = groupsCollaterals[pairs[_pairIndex].groupIndex];
         uint256 index = _long ? 0 : 1;
 
@@ -237,6 +247,7 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
         } else {
             collateralOpen[index] = collateralOpen[index] > _amount ? collateralOpen[index] - _amount : 0;
         }
+        //} 2
     }
 
     function pairFeed(uint16 _pairIndex) external view returns (bytes32) {
@@ -267,7 +278,7 @@ contract OstiumPairsStorage is IOstiumPairsStorage, Initializable {
 
     function groupMaxCollateral(uint16 _pairIndex) external view returns (uint256) {
         return groups[pairs[_pairIndex].groupIndex].maxCollateralP
-            * IOstiumVault(registry.getContractAddress('vault')).currentBalance() / 100_00;
+            * IOstiumVault(registry.getContractAddress("vault")).currentBalance() / 100_00;
     }
 
     function groupCollateral(uint16 _pairIndex, bool _long) external view returns (uint256) {

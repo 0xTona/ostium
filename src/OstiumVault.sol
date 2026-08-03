@@ -1,15 +1,15 @@
 // SPDX-License-Identifier: MIT
-import '@openzeppelin/contracts/utils/math/Math.sol';
-import '@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol';
-import '@openzeppelin/contracts/utils/math/SafeCast.sol';
-import '@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol';
-import '@openzeppelin/contracts-upgradeable/utils/MulticallUpgradeable.sol';
+import "@openzeppelin/contracts/utils/math/Math.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/ERC20Upgradeable.sol";
+import "@openzeppelin/contracts/utils/math/SafeCast.sol";
+import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC4626Upgradeable.sol";
+import "@openzeppelin/contracts-upgradeable/utils/MulticallUpgradeable.sol";
 
-import './interfaces/IOstiumVault.sol';
-import './interfaces/IOstiumOpenPnl.sol';
-import './interfaces/IOstiumRegistry.sol';
-import './interfaces/IOstiumLockedDepositNft.sol';
-import './interfaces/IOwnable.sol';
+import "./interfaces/IOstiumVault.sol";
+import "./interfaces/IOstiumOpenPnl.sol";
+import "./interfaces/IOstiumRegistry.sol";
+import "./interfaces/IOstiumLockedDepositNft.sol";
+import "./interfaces/IOwnable.sol";
 
 pragma solidity ^0.8.24;
 
@@ -124,7 +124,7 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
 
         registry = IOstiumRegistry(_registry);
 
-        __ERC20_init('ostiumLP', 'oLP');
+        __ERC20_init("ostiumLP", "oLP");
         __ERC4626_init(IERC20Metadata(_asset));
 
         maxAccOpenPnlDeltaPerToken = _maxAccOpenPnlDeltaPerToken;
@@ -209,7 +209,7 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
     }
 
     function _onlyCallbacks(address a) private view {
-        if (a != registry.getContractAddress('callbacks')) {
+        if (a != registry.getContractAddress("callbacks")) {
             revert NotCallbacks(a);
         }
     }
@@ -263,6 +263,11 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
     }
 
     function maxAccPnlPerToken() public view returns (uint256) {
+        //@note
+        //Intention
+        //  Max money a LP can claim per share
+        //  Also mean trader can't win more than liquidity from LPs
+
         return accRewardsPerToken + PRECISION_18;
     }
 
@@ -357,6 +362,15 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
     }
 
     function updateShareToAssetsPrice() private {
+        //@note
+        //Intention
+        //  shareToAssetsPrice = (accRewardsPerToken + 1e18) - accPnlPerTokenThreshold - max(effective, 0)
+        //      effective = accPnlPerTokenUsed - accPnlPerTokenThreshold
+        //          -> profit of traders (against LPs)
+        //Follow-up
+        //  Why don't share price go up when traders lose money? (effective < 0)
+        //      -> MM will increase share price with distributeReward()
+
         int256 effective = effectiveAccPnlPerTokenUsed();
         shareToAssetsPrice =
             maxAccPnlPerToken() - uint256(accPnlPerTokenThreshold) - (effective > 0 ? uint256(effective) : uint256(0));
@@ -585,6 +599,11 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
     }
 
     function getWithdrawStatus(address owner, uint32 settlementId) public view returns (RequestStatus requestStatus) {
+        //@note
+        //Intention
+        //  When user deposit/withdraw, their request must wait for settlement 1/1 + withdrawSettlementDelay times
+        //      -> If settlementId > lastSettlementId -> request must wait -> PENDING
+
         if (pendingWithdrawRequest[owner][settlementId] == 0) return RequestStatus.NONE;
         if (settlementId > lastSettlementId) return RequestStatus.PENDING;
         if (totalSharesToWithdraw[settlementId] == 0) {
@@ -606,6 +625,22 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
     }
 
     function _executeAsyncDepositWithdraw(uint32 settlementId) private {
+        //@note
+        //Intention
+        //  1) Cap withdrawals:
+        //      If sharesToWithdraw > min(shareLimit, balanceLimit) -> cancel all withdrawls
+        //          shareLimit = totalSupply - 1 (to prevent total supply from going to 0)
+        //          balanceLimit = max(0, totalSupply * shareToAssetsPrice - openPnlAssets) (to prevent LPs from withdrawing more than the vault can pay out)
+        //  2) Cap deposits and enforce pro-rata:
+        //      If maxDeposit = 0 (no more capacity) -> cancel all deposits
+        //      If requestedDeposits > maxDeposit    -> each request can be filled `settlementAllocationScaleP[settlementId]* pendingDepositRequest[owner][settlementId]` and refund the rest
+        //      Else                                 -> each request is filled in full
+        //  3) Mint/Burn shares for the net deposit & withdrawal amount
+        //  4) settlementShareToAssetsPrice[settlementId] = shareToAssetsPrice;
+        //Audit
+        //  1) If `sharesToWithdraw > maxRedeemAmount`, the entire batch is zeroed out. -> A whale could intentionally submit a massive withdrawal request to force this condition, DoS-ing all other legitimate withdrawals in the epoch.
+
+        //1 {
         // Process withdrawals first
         uint256 sharesToWithdraw = totalSharesToWithdraw[settlementId];
         if (sharesToWithdraw > 0) {
@@ -627,7 +662,9 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
                 sharesToWithdraw = 0;
             }
         }
+        //} 1
 
+        //2 {
         uint256 requestedDeposits = totalAssetsToDeposit[settlementId];
         if (requestedDeposits > 0) {
             // Withdrawals free up capacity, so we adjust the effective supply
@@ -648,7 +685,9 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
                 settlementAllocationScaleP[settlementId] = PRECISION_18;
             }
         }
+        //} 2
 
+        //3 {
         // Mint or burn the net Deposit & Withdraw shares
         int256 deltaShares = convertToShares(totalAssetsToDeposit[settlementId]).toInt256()
             - totalSharesToWithdraw[settlementId].toInt256();
@@ -659,9 +698,12 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
             scaleVariables(uint256(-deltaShares), false);
             _burn(address(this), uint256(-deltaShares));
         }
+        //} 3
 
+        //4 {
         // Update conversion price for the settlement
         settlementShareToAssetsPrice[settlementId] = shareToAssetsPrice;
+        //} 4
 
         emit AsyncDepositWithdrawExecuted(
             settlementId,
@@ -674,7 +716,7 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
 
     function unlockDeposit(uint256 depositId, address receiver) external {
         IOstiumLockedDepositNft lockedDepositNft =
-            IOstiumLockedDepositNft(registry.getContractAddress('lockedDepositNft'));
+            IOstiumLockedDepositNft(registry.getContractAddress("lockedDepositNft"));
         LockedDeposit storage d = lockedDeposits[depositId];
 
         address sender = _msgSender();
@@ -710,6 +752,15 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
 
     // Change accPnlPerToken and accRewardsPerToken state
     function scaleVariables(uint256 shares, bool isDeposit) private {
+        //@note
+        //Intention
+        //  The vault has a "Safty buffer = effective * totalSupply"
+        //  If effective > 0: deposit/withdraw will not change the buffer so we scale it:
+        //      new effective = old effective * oldSupply / newSupply
+        //Audit
+        //  N) Divide by zero: supply = shares
+        //      -> shares cannot = supply, there's a guard in _executeAsyncDepositWithdraw() to prevent this
+
         if (effectiveAccPnlPerTokenUsed() < 0) {
             uint256 supply = totalSupply();
             accPnlPerToken = accPnlPerTokenThreshold + effectiveAccPnlPerTokenUsed() * supply.toInt256()
@@ -772,12 +823,21 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
     }
 
     function _updateAccPnlPerTokenUsed() internal {
+        //@note
+        //Intention
+        //  1) Refresh the Open PnL:
+        //      -> deltaOpenPnl = min(newPnL - oldPnL, MaxAllowedDrain)
+        //      -> accPnlPerToken += deltaOpenPnl / totalSupply
+        //          Guard: Cap the accPnlPerToken < maxAccPnlPerToken() to prevent Vault insolvency
+        //  2) Snapshot accumulator and lastSettlementId++
+
+        //1 {
         uint256 supply = totalSupply();
 
         int256 prevOpenPnl = lastSettlementOpenPnl;
-        int256 newOpenPnl = IOstiumOpenPnl(registry.getContractAddress('openPnl')).getOpenPnlWithRollover();
+        int256 newOpenPnl = IOstiumOpenPnl(registry.getContractAddress("openPnl")).getOpenPnlWithRollover();
 
-        int256 deltaOpenPnl = _getOpenPnlDelta(prevOpenPnl, newOpenPnl, supply); // It VERY important that we recieve an event if max is used;
+        int256 deltaOpenPnl = _getOpenPnlDelta(prevOpenPnl, newOpenPnl, supply);
 
         // Only update accPnlPerToken if supply > 0 to avoid division by zero
         if (supply > 0) {
@@ -786,13 +846,16 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
                 accPnlPerToken = maxAccPnlPerToken().toInt256() - 1;
             }
         }
+        //} 1
 
+        //2 {
         accPnlPerTokenUsed = accPnlPerToken;
         updateShareToAssetsPrice();
 
         ++lastSettlementId;
         lastSettlementTs = block.timestamp.toUint32();
         lastSettlementOpenPnl = prevOpenPnl + deltaOpenPnl;
+        //} 2
 
         emit AccPnlPerTokenUsedUpdatedV2(
             lastSettlementId, prevOpenPnl, newOpenPnl, lastSettlementOpenPnl, accPnlPerTokenUsed
@@ -800,6 +863,11 @@ contract OstiumVault is IOstiumVault, ERC4626Upgradeable, MulticallUpgradeable {
     }
 
     function _getOpenPnlDelta(int256 prevOpenPnl, int256 newOpenPnl, uint256 supply) internal returns (int256) {
+        //@note
+        //Intention
+        //  Calculate raw PnL movement and cap it against the strictest Vault safety limit:
+        //      -> Formula: deltaOpenPnl = min(newOpenPnl - prevOpenPnl, min(VaultInsolvencyRemaining, GovernanceEpochLimit))
+
         uint256 vaultValue = uint256(maxAccPnlPerToken().toInt256() - accPnlPerToken) * supply / PRECISION_6;
         uint256 maxOpenPnlDeltaSupply = maxAccOpenPnlDeltaPerToken * supply / PRECISION_6;
         int256 maxDelta = (Math.min(vaultValue, maxOpenPnlDeltaSupply)).toInt256();
