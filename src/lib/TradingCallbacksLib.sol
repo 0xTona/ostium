@@ -519,6 +519,10 @@ library TradingCallbacksLib {
         //                                                |                  (initialVol + tradeSize)
         //                                            initialVol
         //                                                |------- tradeSize --------|
+        //Follow-up
+        //  A) Scale?
+        //      - spreadComponent: price / price * 1e18 * 100 = 1e20
+        //      - dynamicComponent: priceImpactK / 1e27 * volume * 100 = 1e20
 
         //1
         uint256 spreadComponent = (askPrice - bidPrice) * PRECISION_18 * 100 / (midPrice * 2);
@@ -681,6 +685,7 @@ library TradingCallbacksLib {
         if (bf.builder != address(0) && bf.builderFee > 0) {
             builderFee = bf.builderFee * preFeeNotional / PRECISION_6 / 100;
         }
+
         // We only use takerFeeP no matter maker or taker
         uint256 openingFee = preFeeNotional * takerFeeP / PRECISION_6 / 100;
 

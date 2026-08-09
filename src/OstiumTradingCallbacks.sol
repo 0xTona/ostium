@@ -400,12 +400,18 @@ contract OstiumTradingCallbacks is IOstiumTradingCallbacks, Initializable {
         //      3.2) Else if price/bid/ask <= 0  -> cancelReason = MARKET_CLOSED
         //      3.3) Else if no open limit order -> cancelReason = NO_TRADE
         //      3.4) Else                        -> cancelReason = NONE
-        //  4) If cancelReason == NONE -> check day trading
+        //  4) If cancelReason == NONE
+        //      If pendingId, limitOrderId != 0 && pendingId != limitOrderId -> cancelReason = WRONG_TRADE
+        //      If isDayTrade && isDayTradingClosed                          -> cancelReason = DAY_TRADE_NOT_ALLOWED
         //  5) If still NONE           -> get price impact and validate order
         //  6) If still NONE           -> register trade, update spread, pnl and unregister limit order
         //  8) delete automation order {pending trigger, pending automation order}
+        //Audit
+        //  Don't validate timeout
+        //  4) Don't require id != 0
         //Follow-up
-        //  6) pnl
+        //  4) Skip id = 0?
+        //      -> After upgrade,id start from 1. Before upgrade, id is 0.
 
         (IOstiumTradingStorage storageT, IOstiumPairInfos pairInfos, IOstiumPairsStorage pairsStorage) = getContracts();
 

@@ -366,6 +366,12 @@ contract OstiumTradingStorage is IOstiumTradingStorage, Initializable {
         external
         onlyTradingOrCallbacks
     {
+        //@note
+        //Intention
+        //  Swap openLimitOrderId. pairLimitOrder with last element and pop the last element
+        //Follow-up
+        //  If last pairLimitOrder is pending trigger?
+
         if (!hasOpenLimitOrder(_trader, _pairIndex, _index)) return;
 
         uint256 id = openLimitOrderIds[_trader][_pairIndex][_index];

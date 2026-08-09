@@ -189,12 +189,12 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
     }
 
     //struct Trade {                                | OpenOrderType {
-    //    uint256 collateral; // PRECISION_6        |    MARKET_OPEN, //immediately
-    //    uint192 openPrice; // PRECISION_18        |    MARKET_CLOSE
-    //    uint192 tp; // PRECISION_18               |    LIMIT_OPEN, //pending until better price
-    //    uint192 sl; // PRECISION_18               |    LIMIT_CLOSE //pending until worse price
-    //    address trader;                           |    REMOVE_COLLATERAL
-    //    uint32 leverage; // PRECISION_2           | }
+    //    uint256 collateral; // PRECISION_6        |    MARKET,
+    //    uint192 openPrice; // PRECISION_18        |    LIMIT
+    //    uint192 tp; // PRECISION_18               |    STOP,
+    //    uint192 sl; // PRECISION_18               |}
+    //    address trader;                           |
+    //    uint32 leverage; // PRECISION_2           |
     //    uint16 pairIndex;                         |
     //    uint8 index;                              | BuilderFee {
     //    bool buy;  // true = long, false = short  |    address builder;
@@ -706,7 +706,7 @@ contract OstiumTrading is IOstiumTrading, Delegatable, Initializable {
         //     2.1) If orderType == OPEN:
         //              hasOpenLimitOrder()
         //              isNotPaused()
-        //              valid timestamp: priceTimestamp >= order.createdAt
+        //              valid timestamp: priceTimestamp >= openOrder.lastUpdated
         //     2.2) Else (close types: TP/SL/LIQ/...):
         //              hasOpenTrade: leverage == 0
         //              valid timestamp: priceTimestamp >= tradeInfo.createdAt
